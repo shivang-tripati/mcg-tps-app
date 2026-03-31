@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        /* ===============================
+       BASE
+       =============================== */
+        --color-background: 0 0% 100%;
+        --color-foreground: 222 47% 11%;
+
+        /* ===============================
+       MCG PRIMARY (MAROON / WINE)
+       =============================== */
+        --color-primary: 325 45% 32%;
+        --color-primary-light: 325 45% 95%;
+        --color-primary-dark: 325 45% 22%;
+
+        /* ===============================
+       NEUTRAL SECTIONS
+       =============================== */
+        --color-secondary: 220 14% 96%;
+        --color-secondary-light: 220 14% 98%;
+        --color-secondary-dark: 220 14% 90%;
+
+        /* ===============================
+       STATUS (LEGAL MEANING ONLY)
+       =============================== */
+        --color-success: 142 72% 29%;
+        --color-warning: 38 92% 38%;
+        --color-error: 0 72% 38%;
+        --color-info: 325 45% 32%;
+
+        /* ===============================
+       MUTED / BORDERS
+       =============================== */
+        --color-muted: 220 14% 96%;
+        --color-muted-foreground: 220 9% 46%;
+        --color-border: 220 13% 82%;
+        --color-input: 220 13% 82%;
+        --color-ring: 325 45% 32%;
+
+        /* ===============================
+       CARD
+       =============================== */
+        --color-card: 0 0% 100%;
+        --color-card-foreground: 222 47% 11%;
+
+        /* ===============================
+       RADIUS
+       =============================== */
+        --radius-sm: 2px;
+        --radius-md: 4px;
+        --radius-lg: 6px;
+        --radius-xl: 8px;
+    }
+}
