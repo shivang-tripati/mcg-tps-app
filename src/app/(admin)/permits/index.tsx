@@ -112,6 +112,7 @@ export default function AdminPermitsScreen() {
                         data={permits}
                         renderItem={renderPermitCard}
                         keyExtractor={(item) => item.id}
+                        keyboardShouldPersistTaps="handled"
                         refreshControl={
                             <RefreshControl refreshing={isRefetching} onRefresh={() => refetch()} />
                         }

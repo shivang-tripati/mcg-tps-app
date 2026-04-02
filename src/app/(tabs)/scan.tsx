@@ -19,7 +19,7 @@ export default function ScanScreen() {
 
     const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
         setScanned(true);
-
+        console.log("data of scanner", data)
         // Try to extract permit ID from QR code data
         // Expected format: https://example.com/permits/{id} or just the ID
         const permitIdMatch = data.match(/permits\/([a-f0-9-]{36})/i) || data.match(/^([a-f0-9-]{36})$/i);

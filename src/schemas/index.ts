@@ -168,15 +168,24 @@ const dateTimeField = (label: string) =>
 
 
 
+const emptyToUndefined = (v: unknown) =>
+    v === "" || v === null || v === undefined ? undefined : v;
+
 export const createPermitSchema = z.object({
     wasteType: z.enum(WasteType),
 
     estimatedWeight: z.number().positive().optional(),
     estimatedVolume: z.number().positive().optional(),
-    wasteDescription: z.string().optional(),
+    wasteDescription: z.preprocess(emptyToUndefined, z.string().optional()),
 
-    projectId: z.string().uuid().optional(),
-    companyId: z.string().uuid().optional(),
+    projectId: z.preprocess(
+        emptyToUndefined,
+        z.string().uuid().optional()
+    ),
+    companyId: z.preprocess(
+        emptyToUndefined,
+        z.string().uuid().optional()
+    ),
     plantId: z.string().uuid(),
 
     pickupAddress: z.string().min(5, "Pickup address is required"),
@@ -186,23 +195,57 @@ export const createPermitSchema = z.object({
     pickupLatitude: z.number().min(-90).max(90).optional(),
     pickupLongitude: z.number().min(-180).max(180).optional(),
 
-    driverName: z.string().optional(),
-    driverPhone: z.string().regex(/^\+?[1-9]\d{9,14}$/).optional(),
-    vehicleNumber: z.string().optional(),
-    vehicleType: z.string().optional(),
-    licenseNumber: z
-        .string()
-        .toUpperCase()
-        .regex(
-            /^[A-Z]{2}[- ]?\d{2}[- ]?\d{4}[- ]?\d{4,7}$/,
-            { message: "Invalid Indian driving license number format" }
-        )
-        .optional(),
-
+    driverName: z.preprocess(emptyToUndefined, z.string().optional()),
+    driverPhone: z.preprocess(
+        emptyToUndefined,
+        z
+            .string()
+            .regex(/^\+?[1-9]\d{9,14}$/, "Valid phone number required")
+            .optional()
+    ),
+    vehicleNumber: z.preprocess(emptyToUndefined, z.string().optional()),
+    vehicleType: z.preprocess(emptyToUndefined, z.string().optional()),
+    licenseNumber: z.preprocess(
+        (v) => {
+            const x = emptyToUndefined(v);
+            if (x === undefined) return undefined;
+            return String(x).toUpperCase();
+        },
+        z
+            .string()
+            .regex(
+                /^[A-Z]{2}[- ]?\d{2}[- ]?\d{4}[- ]?\d{4,7}$/,
+                { message: "Invalid Indian driving license number format" }
+            )
+            .optional()
+    ),
 
     validFrom: dateTimeField("Start date & time"),
     validUntil: dateTimeField("End date & time"),
 
+});
+
+const requiredDateTime = (label: string) =>
+    z
+        .string()
+        .min(1, `${label} is required`)
+        .refine(
+            (val) => {
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val)) return true;
+                const d = new Date(val);
+                return !isNaN(d.getTime());
+            },
+            { message: `Please select a valid ${label}` }
+        );
+
+/** Mobile create flow: same rules as createPermitSchema but requires validity window. */
+export const mobileNewPermitFormSchema = createPermitSchema.extend({
+    validFrom: requiredDateTime("Start date & time"),
+    validUntil: requiredDateTime("End date & time"),
+    plantId: z
+        .string()
+        .min(1, "Select a destination plant")
+        .uuid("Select a destination plant"),
 });
 
 export const updatePermitSchema = createPermitSchema.partial();
@@ -302,6 +345,7 @@ export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type CreatePlantInput = z.infer<typeof createPlantSchema>;
 export type UpdatePlantInput = z.infer<typeof updatePlantSchema>;
 export type CreatePermitInput = z.infer<typeof createPermitSchema>;
+export type MobileNewPermitFormInput = z.infer<typeof mobileNewPermitFormSchema>;
 export type UpdatePermitInput = z.infer<typeof updatePermitSchema>;
 export type SubmitPermitInput = z.infer<typeof submitPermitSchema>;
 export type ApprovePermitInput = z.infer<typeof approvePermitSchema>;

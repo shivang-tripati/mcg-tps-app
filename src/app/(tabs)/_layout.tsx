@@ -8,6 +8,7 @@ export default function TabsLayout() {
                 name="dashboard"
                 options={{
                     title: 'Home',
+                    headerShown: false,
                     tabBarIcon: ({ color }) => <LucideHome size={24} color={color} />,
                 }}
             />
@@ -15,6 +16,7 @@ export default function TabsLayout() {
                 name="permits"
                 options={{
                     title: 'Permits',
+                    headerShown: false,
                     tabBarIcon: ({ color }) => <LucideFileText size={24} color={color} />,
                 }}
             />
@@ -22,6 +24,7 @@ export default function TabsLayout() {
                 name="scan"
                 options={{
                     title: 'Scan',
+                    headerShown: false,
                     tabBarIcon: ({ color }) => <LucideScan size={24} color={color} />,
                 }}
             />
@@ -29,6 +32,7 @@ export default function TabsLayout() {
                 name="profile"
                 options={{
                     title: 'Profile',
+                    headerShown: false,
                     tabBarIcon: ({ color }) => <LucideUser size={24} color={color} />,
                 }}
             />

@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { queryClient } from '../lib/query-client';
 import { useAuth } from '../lib/auth-store';
 import { UserRole } from '../types/database';
@@ -53,15 +54,19 @@ export default function RootLayout() {
     }
 
     return (
-        <QueryClientProvider client={queryClient}>
-            <Stack screenOptions={{ headerShown: false }}>
-                <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                <Stack.Screen name="(admin)" options={{ headerShown: false }} />
-                <Stack.Screen name="verify" options={{ headerShown: false }} />
-                <Stack.Screen name="admin" options={{ headerShown: false }} />
-            </Stack>
-            <StatusBar style="auto" />
-        </QueryClientProvider>
+        <SafeAreaProvider>
+            <QueryClientProvider client={queryClient}>
+                <Stack screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="index" options={{ headerShown: false }} />
+                    <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                    <Stack.Screen name="(admin)" options={{ headerShown: false }} />
+                    <Stack.Screen name="permits" options={{ headerShown: false }} />
+                    <Stack.Screen name="verify" options={{ headerShown: false }} />
+                    <Stack.Screen name="admin" options={{ headerShown: false }} />
+                </Stack>
+                <StatusBar style="auto" />
+            </QueryClientProvider>
+        </SafeAreaProvider>
     );
 }

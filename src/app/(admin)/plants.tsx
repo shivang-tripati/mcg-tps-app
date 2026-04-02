@@ -87,6 +87,7 @@ export default function PlantsListScreen() {
                     keyExtractor={(item) => item.id}
                     renderItem={renderPlantCard}
                     contentContainerStyle={{ padding: 16 }}
+                    keyboardShouldPersistTaps="handled"
                     refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
                     ListEmptyComponent={
                         <View className="items-center py-12">

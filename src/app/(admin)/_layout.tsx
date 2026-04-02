@@ -1,13 +1,11 @@
-import { Tabs, useRouter } from 'expo-router';
+import { Tabs, useRouter, Stack } from 'expo-router';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import {
     LucideHome,
-    LucideFileText,
     LucideBuilding2,
     LucideFactory,
-    LucideUsers,
-    LucideScale
+    LucideUsers
 } from 'lucide-react-native';
 import { useAuth } from '../../lib/auth-store';
 import { UserRole } from '../../types/database';
@@ -61,15 +59,6 @@ export default function AdminLayout() {
                 }}
             />
             <Tabs.Screen
-                name="permits"
-                options={{
-                    title: 'Permits',
-                    tabBarIcon: ({ color }) => <LucideFileText size={22} color={color} />,
-                    headerTitle: 'Manage Permits',
-                    headerShown: false
-                }}
-            />
-            <Tabs.Screen
                 name="plants"
                 options={{
                     title: 'Plants',
@@ -83,14 +72,6 @@ export default function AdminLayout() {
                     title: 'Users',
                     tabBarIcon: ({ color }) => <LucideUsers size={22} color={color} />,
                     headerTitle: 'Users',
-                }}
-            />
-            <Tabs.Screen
-                name="weighments"
-                options={{
-                    title: 'Weighments',
-                    tabBarIcon: ({ color }) => <LucideScale size={22} color={color} />,
-                    headerTitle: 'Weighments',
                 }}
             />
         </Tabs>

@@ -118,6 +118,7 @@ export default function UsersListScreen() {
                     keyExtractor={(item) => item.id}
                     renderItem={renderUserCard}
                     contentContainerStyle={{ padding: 16 }}
+                    keyboardShouldPersistTaps="handled"
                     refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
                     ListEmptyComponent={
                         <View className="items-center py-12">

@@ -86,3 +86,16 @@ export const getEvidenceUrl = (path: string) => {
     const baseUrl = process.env.EXPO_PUBLIC_FILE_BASE_URL || `http://${IP_ADDRESS}:${PORT}`;
     return `${baseUrl}/${path}`;
 };
+
+/**
+ * Use for `Image` `uri` when the API may return either a storage key (e.g. `evidence/2026/04/uuid.jpg`)
+ * or an absolute URL (e.g. CDN / presigned).
+ */
+export function resolveEvidenceFileUrl(pathOrUrl: string | null | undefined): string {
+    if (pathOrUrl == null) return '';
+    const s = pathOrUrl.trim();
+    if (s === '') return '';
+    if (/^(https?:|file:|data:|blob:)/i.test(s)) return s;
+    const rel = s.replace(/^\/+/, '');
+    return getEvidenceUrl(rel);
+}

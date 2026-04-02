@@ -17,6 +17,7 @@ interface Project {
     address: string;
     city: string;
     state: string;
+    pincode?: string;
     companyId: string;
 }
 

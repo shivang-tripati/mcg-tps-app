@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, TextInput, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
@@ -88,7 +88,10 @@ export default function VerifyScreen() {
             const token = tokenMatch[1];
 
             // Call public verification endpoint
-            const response = await axios.get(`${API_URL}/permits/verify/${token}`);
+            const response = await axios.get(`${API_URL}/verify`, {
+                params: { token }
+            });
+
 
             if (response.data.success) {
                 setVerifiedPermit(response.data.data);
@@ -371,27 +374,33 @@ export default function VerifyScreen() {
 
                 <KeyboardAvoidingView
                     behavior={Platform.OS === "ios" ? "padding" : "height"}
-                    className="flex-1 p-6 justify-center"
+                    className="flex-1"
                 >
-                    <View className="bg-card p-6 rounded-xl border border-border shadow-sm">
-                        <Text className="text-lg font-semibold mb-4 text-foreground">Enter Permit Token</Text>
-                        <TextInput
-                            className="bg-background border border-border rounded-lg p-4 mb-4 text-foreground font-mono"
-                            placeholder="Enter unique token UUID"
-                            placeholderTextColor="hsl(240 3.8% 46.1%)"
-                            value={manualToken}
-                            onChangeText={setManualToken}
-                            autoCapitalize="none"
-                            autoCorrect={false}
-                        />
-                        <Button
-                            label={verifying ? "Verifying..." : "Verify Permit"}
-                            onPress={handleManualSubmit}
-                            loading={verifying}
-                        />
-
-
-                    </View>
+                    <ScrollView
+                        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center' }}
+                        keyboardShouldPersistTaps="handled"
+                        className="flex-1 p-6"
+                    >
+                        <View className="bg-card p-6 rounded-xl border border-border shadow-sm">
+                            <Text className="text-lg font-semibold mb-4 text-foreground">Enter Permit Token</Text>
+                            <TextInput
+                                className="bg-background border border-border rounded-lg p-4 mb-4 text-foreground font-mono"
+                                placeholder="Enter unique token UUID"
+                                placeholderTextColor="hsl(240 3.8% 46.1%)"
+                                value={manualToken}
+                                onChangeText={setManualToken}
+                                autoCapitalize="none"
+                                autoCorrect={false}
+                                onSubmitEditing={handleManualSubmit}
+                                returnKeyType="go"
+                            />
+                            <Button
+                                label={verifying ? "Verifying..." : "Verify Permit"}
+                                onPress={handleManualSubmit}
+                                loading={verifying}
+                            />
+                        </View>
+                    </ScrollView>
                 </KeyboardAvoidingView>
             </SafeAreaView>
         );

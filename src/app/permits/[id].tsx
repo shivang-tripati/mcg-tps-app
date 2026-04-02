@@ -1,8 +1,18 @@
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LucideArrowLeft, LucideMapPin, LucideTruck, LucideUser, LucideCalendar, LucidePackage } from 'lucide-react-native';
+import {
+    LucideArrowLeft,
+    LucideMapPin,
+    LucideTruck,
+    LucideUser,
+    LucideCalendar,
+    LucidePackage,
+    LucideImages,
+    LucideFileText,
+} from 'lucide-react-native';
 import { usePermit } from '../../hooks/use-permits';
+import { resolveEvidenceFileUrl } from '../../lib/utils';
 
 const STATUS_COLORS = {
     DRAFT: 'hsl(220 9% 46%)',
@@ -97,6 +107,53 @@ export default function PermitDetailScreen() {
                             label="Estimated Weight"
                             value={`${permit.estimatedWeight} kg`}
                         />
+                    )}
+                </View>
+
+                {/* Waste evidence */}
+                <View className="bg-card border border-border rounded-lg p-4 mb-4">
+                    <View className="flex-row items-center gap-2 mb-3">
+                        <LucideImages size={20} color="hsl(220 9% 46%)" />
+                        <Text className="text-base font-semibold text-foreground">Waste evidence</Text>
+                    </View>
+                    {permit.wasteEvidences && permit.wasteEvidences.length > 0 ? (
+                        <View className="flex-row flex-wrap gap-3">
+                            {permit.wasteEvidences.map((evidence) => {
+                                const isPdf =
+                                    evidence.mimeType?.toLowerCase().includes('pdf') ?? false;
+                                return (
+                                    <View
+                                        key={evidence.id}
+                                        className="w-[47%] rounded-lg overflow-hidden border border-border bg-muted"
+                                    >
+                                        {isPdf ? (
+                                            <View className="aspect-square items-center justify-center bg-background p-3">
+                                                <LucideFileText size={32} color="hsl(220 9% 46%)" />
+                                                <Text
+                                                    className="text-xs text-foreground text-center mt-2"
+                                                    numberOfLines={3}
+                                                >
+                                                    {evidence.fileName}
+                                                </Text>
+                                            </View>
+                                        ) : (
+                                            <Image
+                                                source={{ uri: resolveEvidenceFileUrl(evidence.filePath) }}
+                                                className="w-full aspect-square bg-gray-100"
+                                                resizeMode="cover"
+                                            />
+                                        )}
+                                        {evidence.description ? (
+                                            <Text className="text-xs text-muted-foreground p-2" numberOfLines={2}>
+                                                {evidence.description}
+                                            </Text>
+                                        ) : null}
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    ) : (
+                        <Text className="text-sm text-muted-foreground">No waste evidence photos uploaded.</Text>
                     )}
                 </View>
 

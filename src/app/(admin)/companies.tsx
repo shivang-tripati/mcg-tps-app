@@ -81,6 +81,7 @@ export default function CompaniesListScreen() {
                     keyExtractor={(item) => item.id}
                     renderItem={renderCompanyCard}
                     contentContainerStyle={{ padding: 16 }}
+                    keyboardShouldPersistTaps="handled"
                     refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} />}
                     ListEmptyComponent={
                         <View className="items-center py-12">

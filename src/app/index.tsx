@@ -8,22 +8,22 @@ export default function LandingScreen() {
 
     return (
         <SafeAreaView className="flex-1 bg-background">
-            <View className="flex-1 px-8 justify-between py-12">
+            <View className="flex-1 px-8 justify-between py-12 gap-4">
                 {/* Branding Section */}
                 <View className="items-center mt-12">
                     <View className="w-24 h-24 bg-primary/10 rounded-3xl items-center justify-center mb-6">
-                        <Text className="text-4xl text-primary font-bold">PT</Text>
+                        <Text className="text-4xl text-primary font-bold">MFG</Text>
                     </View>
                     <Text className="text-3xl font-bold text-foreground text-center mb-2">
-                        Transport Permit
+                        C & D Waste Management
                     </Text>
                     <Text className="text-lg text-muted-foreground text-center px-4">
-                        Municipal Corporation Gurugram Waste Management System
+                        Malba free gurugram
                     </Text>
                 </View>
 
                 {/* Actions Section */}
-                <View className="space-y-4">
+                <View className="space-y-4 gap-4">
                     <Button
                         label="Verify Permit"
                         onPress={() => router.push('/verify')}

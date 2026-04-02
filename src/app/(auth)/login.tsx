@@ -7,7 +7,7 @@ import { useAuth } from '../../lib/auth-store';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { KeyboardAwareScreen } from '../../components/ui/keyboard-aware-screen';
 
 // Import schema from web source (via Metro config)
 // If this fails, fallback to local definition for now
@@ -48,74 +48,76 @@ export default function LoginScreen() {
     };
 
     return (
-        <SafeAreaView className="flex-1 bg-background px-6 justify-center">
-            <View className="mb-6">
-                <Text className="text-3xl font-bold text-primary mb-2">Welcome Back</Text>
-                <Text className="text-muted-foreground">Sign in to access your Transport Permit System account</Text>
+        <KeyboardAwareScreen className="flex-1 bg-background" scrollable>
+            <View className="flex-1 px-6 justify-center">
+                <View className="mb-6">
+                    <Text className="text-3xl font-bold text-primary mb-2">Welcome Back</Text>
+                    <Text className="text-muted-foreground">Sign in to access your Transport Permit System account</Text>
+                </View>
+
+                <View className="space-y-4">
+                    <Controller
+                        control={control}
+                        name="email"
+                        render={({ field: { onChange, onBlur, value } }) => (
+                            <Input
+                                label="Email"
+                                placeholder="Enter your email"
+                                onBlur={onBlur}
+                                onChangeText={onChange}
+                                value={value}
+                                error={errors.email?.message}
+                                autoCapitalize="none"
+                                keyboardType="email-address"
+                            />
+                        )}
+                    />
+
+                    <Controller
+                        control={control}
+                        name="password"
+                        render={({ field: { onChange, onBlur, value } }) => (
+                            <Input
+                                label="Password"
+                                placeholder="Enter your password"
+                                onBlur={onBlur}
+                                onChangeText={onChange}
+                                value={value}
+                                error={errors.password?.message}
+                                secureTextEntry
+                            />
+                        )}
+                    />
+
+                    {/* <TouchableOpacity className="self-end" onPress={() => Alert.alert('Forgot Password', 'Please contact your administrator.')}>
+                        <Text className="text-primary font-medium">Forgot Password?</Text>
+                    </TouchableOpacity> */}
+
+                    <Button
+                        label={isSubmitting ? "Signing in..." : "Sign In"}
+                        onPress={handleSubmit(onSubmit)}
+                        loading={isSubmitting}
+                        className="mt-4"
+                    />
+                </View>
+
+                <View className="mt-8 flex-row justify-center space-x-1">
+                    <Text className="text-muted-foreground">Don't have an account?</Text>
+                    <Link href="/register" asChild>
+                        <TouchableOpacity>
+                            <Text className="text-primary font-bold">Register</Text>
+                        </TouchableOpacity>
+                    </Link>
+                </View>
+
+                <View className="mt-6 flex-row justify-center pb-6">
+                    <Link href="/verify" asChild>
+                        <TouchableOpacity className="py-1">
+                            <Text className="text-primary text-sm">Verify Permit (No Login Required)</Text>
+                        </TouchableOpacity>
+                    </Link>
+                </View>
             </View>
-
-            <View className="space-y-4">
-                <Controller
-                    control={control}
-                    name="email"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                        <Input
-                            label="Email"
-                            placeholder="Enter your email"
-                            onBlur={onBlur}
-                            onChangeText={onChange}
-                            value={value}
-                            error={errors.email?.message}
-                            autoCapitalize="none"
-                            keyboardType="email-address"
-                        />
-                    )}
-                />
-
-                <Controller
-                    control={control}
-                    name="password"
-                    render={({ field: { onChange, onBlur, value } }) => (
-                        <Input
-                            label="Password"
-                            placeholder="Enter your password"
-                            onBlur={onBlur}
-                            onChangeText={onChange}
-                            value={value}
-                            error={errors.password?.message}
-                            secureTextEntry
-                        />
-                    )}
-                />
-
-                <TouchableOpacity className="self-end" onPress={() => Alert.alert('Forgot Password', 'Please contact your administrator.')}>
-                    <Text className="text-primary font-medium">Forgot Password?</Text>
-                </TouchableOpacity>
-
-                <Button
-                    label={isSubmitting ? "Signing in..." : "Sign In"}
-                    onPress={handleSubmit(onSubmit)}
-                    loading={isSubmitting}
-                    className="mt-4"
-                />
-            </View>
-
-            <View className="mt-8 flex-row justify-center space-x-1">
-                <Text className="text-muted-foreground">Don't have an account?</Text>
-                <Link href="/register" asChild>
-                    <TouchableOpacity>
-                        <Text className="text-primary font-bold">Register</Text>
-                    </TouchableOpacity>
-                </Link>
-            </View>
-
-            <View className="mt-6 flex-row justify-center">
-                <Link href="/verify" asChild>
-                    <TouchableOpacity className="py-1">
-                        <Text className="text-primary text-sm">Verify Permit (No Login Required)</Text>
-                    </TouchableOpacity>
-                </Link>
-            </View>
-        </SafeAreaView>
+        </KeyboardAwareScreen>
     );
 }

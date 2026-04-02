@@ -1,4 +1,4 @@
-import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image, Modal, TextInput, Linking, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Image, Modal, TextInput, Linking, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
@@ -30,6 +30,7 @@ import { StatusBadge } from '../../../components/ui/status-badge';
 import { PermitStatus, WeighmentStatus } from '../../../types/database';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
+import { resolveEvidenceFileUrl } from '../../../lib/utils';
 
 export default function AdminPermitDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -194,7 +195,7 @@ export default function AdminPermitDetailScreen() {
                 ))}
             </View>
 
-            <ScrollView className="flex-1">
+            <ScrollView className="flex-1" keyboardShouldPersistTaps="handled">
                 {activeTab === 'overview' && (
                     <View className="p-4 mb-2 space-y-6">
                         {/* Logic Section or Error Section */}
@@ -300,7 +301,10 @@ export default function AdminPermitDetailScreen() {
                         ) : (
                             permit.wasteEvidences.map((evidence) => (
                                 <View key={evidence.id} className="bg-card rounded-lg overflow-hidden border border-border mb-4">
-                                    <Image source={{ uri: evidence.filePath }} className="w-full h-40 bg-gray-100" />
+                                    <Image
+                                        source={{ uri: resolveEvidenceFileUrl(evidence.filePath) }}
+                                        className="w-full h-40 bg-gray-100"
+                                    />
                                     {evidence.description && (
                                         <View className="p-2">
                                             <Text className="text-xs text-muted-foreground">{evidence.description}</Text>
@@ -400,7 +404,7 @@ export default function AdminPermitDetailScreen() {
             </ScrollView>
 
             {/* Action Buttons Bar */}
-            <View className="absolute bottom-0 left-0 right-0 p-4 bg-background border-t border-border flex-row gap-3">
+            <View className="absolute bottom-0 left-0 right-0 p-4 pb-6 bg-background border-t border-border flex-row gap-3">
                 {canApprove && (
                     <Button className="flex-1 bg-primary" onPress={() => setIsApproveModalVisible(true)}>
                         <LucideCheckCircle size={20} color="white" className="mr-2" />
@@ -435,8 +439,8 @@ export default function AdminPermitDetailScreen() {
 
             {/* Approve Modal */}
             <Modal animationType="slide" transparent={true} visible={isApproveModalVisible} onRequestClose={() => setIsApproveModalVisible(false)}>
-                <View className="flex-1 justify-end bg-black/50">
-                    <View className="bg-background rounded-t-xl p-6">
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 justify-end bg-black/50">
+                    <View className="bg-background rounded-t-xl p-6 pb-8">
                         <Text className="text-xl font-bold mb-4">Approve Permit</Text>
                         <Text className="text-sm text-muted-foreground mb-4">Set validity date for this permit.</Text>
 
@@ -456,13 +460,13 @@ export default function AdminPermitDetailScreen() {
                             <Text className="text-foreground">Cancel</Text>
                         </Button>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Reject Modal */}
             <Modal animationType="slide" transparent={true} visible={isRejectModalVisible} onRequestClose={() => setIsRejectModalVisible(false)}>
-                <View className="flex-1 justify-end bg-black/50">
-                    <View className="bg-background rounded-t-xl p-6">
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 justify-end bg-black/50">
+                    <View className="bg-background rounded-t-xl p-6 pb-8">
                         <Text className="text-xl font-bold mb-4 text-destructive">Reject Permit</Text>
 
                         <Text className="mb-2 font-medium">Reason for Rejection</Text>
@@ -483,13 +487,14 @@ export default function AdminPermitDetailScreen() {
                             <Text className="text-foreground">Cancel</Text>
                         </Button>
                     </View>
-                </View>
+                </KeyboardAvoidingView>
             </Modal>
 
             {/* Weighment Modal */}
             <Modal animationType="slide" transparent={true} visible={isWeighmentModalVisible} onRequestClose={() => setIsWeighmentModalVisible(false)}>
-                <View className="flex-1 justify-end bg-black/50">
-                    <View className="bg-background rounded-t-xl p-6">
+                <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1 justify-end bg-black/50">
+                    <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }} keyboardShouldPersistTaps="handled">
+                    <View className="bg-background rounded-t-xl p-6 pb-8">
                         <Text className="text-xl font-bold mb-4">Record Weighment</Text>
 
                         <Text className="mb-2 font-medium">First Weight (kg)</Text>
@@ -528,7 +533,8 @@ export default function AdminPermitDetailScreen() {
                             <Text className="text-foreground">Cancel</Text>
                         </Button>
                     </View>
-                </View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
             </Modal>
         </SafeAreaView>
     );

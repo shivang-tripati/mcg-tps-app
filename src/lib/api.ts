@@ -1,6 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { storage, SecureStorage, AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from './storage';
-import { Platform } from 'react-native';
 
 // Replace with your actual development machine IP for Android Emulator
 // For iOS Simulator, localhost works.
@@ -15,7 +14,7 @@ import { Platform } from 'react-native';
 
 const IP_ADDRESS = '192.168.0.103';
 const PORT = '3000';
-const DEV_API_URL = `http://${IP_ADDRESS}:${PORT}/api/v1`;
+const DEV_API_URL = `${IP_ADDRESS}:${PORT}/api/v1`;
 
 export const api = axios.create({
     baseURL: process.env.EXPO_PUBLIC_API_URL || DEV_API_URL,
@@ -24,6 +23,10 @@ export const api = axios.create({
         'X-Client-Type': 'mobile',
     },
 });
+
+/** Relative to `baseURL` — must match your Next route (e.g. `POST /api/v1/upload`). */
+export const UPLOAD_FILE_PATH =
+    process.env.EXPO_PUBLIC_UPLOAD_PATH ?? '/upload';
 
 // Request Interceptor
 api.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
