@@ -79,14 +79,25 @@ export default function DashboardScreen() {
 
     const onRefresh = () => refetch();
 
+    // In your component
+    // In your component
     const openPermit = (permitId: string) => {
-        if (user?.role === 'ADMIN') {
-            router.push(`/(admin)/permits/${permitId}` as const);
-        } else {
-            router.push(`/permits/${permitId}` as const);
-        }
-    };
+        console.log('🔍 Opening permit:', {
+            permitId,
+            userRole: user?.role,
+            isAdmin: user?.role === 'ADMIN'
+        });
 
+        if (user?.role === 'ADMIN') {
+            const route = `/(admin)/permits/${permitId}`;
+            console.log('📱 Navigating to admin route:', route);
+            router.push(route);
+        } else {
+            const route = `/permits/${permitId}`;
+            console.log('📱 Navigating to user route:', route);
+            router.push(route);
+        }
+    };;
     if (isLoading) {
         return (
             <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -166,9 +177,6 @@ export default function DashboardScreen() {
                 <View className="px-6 pt-2 pb-10 bg-primary rounded-b-[28px] shadow-sm">
                     <View className="flex-row items-start justify-between">
                         <View className="flex-1 pr-4">
-                            <Text className="text-white/85 text-sm font-medium tracking-wide uppercase">
-                                Dashboard
-                            </Text>
                             <Text className="text-white text-2xl font-bold mt-1.5 leading-tight">
                                 Welcome back
                             </Text>
@@ -284,11 +292,10 @@ export default function DashboardScreen() {
                             dashboardData.recentActivity.map((activity, index) => (
                                 <TouchableOpacity
                                     key={activity.id}
-                                    className={`p-4 flex-row items-center active:bg-muted/50 ${
-                                        index !== dashboardData.recentActivity.length - 1
+                                    className={`p-4 flex-row items-center active:bg-muted/50 ${index !== dashboardData.recentActivity.length - 1
                                             ? 'border-b border-border'
                                             : ''
-                                    }`}
+                                        }`}
                                     onPress={() => openPermit(activity.id)}
                                     activeOpacity={0.7}
                                 >

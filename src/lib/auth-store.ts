@@ -10,57 +10,83 @@ interface User {
     companyId?: string | null;
 }
 
+// lib/auth-store.ts
 interface AuthState {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
+    isNewRegistration: boolean; // Add this
     login: (accessToken: string, refreshToken: string, user: User) => Promise<void>;
     logout: () => Promise<void>;
     hydrate: () => Promise<void>;
     updateUser: (user: Partial<User>) => void;
+    clearNewRegistration: () => void; // Add this
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
     user: null,
     isAuthenticated: false,
     isLoading: true,
+    isNewRegistration: false, // Initialize
 
     login: async (accessToken, refreshToken, user) => {
         try {
-            // 1. Validate inputs before touching storage
             if (!accessToken || !refreshToken || !user) {
-                console.error("❌ Login failed: Missing data", {
-                    hasToken: !!accessToken,
-                    hasRefresh: !!refreshToken,
-                    hasUser: !!user
-                });
-                return; // Exit early to avoid the crashes you saw
+                console.error("❌ Login failed: Missing data");
+                return;
             }
 
-            // 2. Ensure everything is a string
             const tokenStr = String(accessToken);
             const refreshStr = String(refreshToken);
             const userStr = JSON.stringify(user);
 
-            // 3. Execute storage saves
             await Promise.all([
                 SecureStorage.setItem(AUTH_TOKEN_KEY, tokenStr),
                 storage.set(USER_KEY, userStr),
                 SecureStorage.setItem(REFRESH_TOKEN_KEY, refreshStr)
             ]);
 
-            set({ user, isAuthenticated: true });
+            // Set isNewRegistration to true when logging in from registration
+            // We'll detect this from the login call
+            set({ 
+                user, 
+                isAuthenticated: true,
+                isNewRegistration: true // Flag for first-time login
+            });
 
-            // Navigation is now handled by the root layout's onboarding-aware logic
-            // The layout will detect isAuthenticated=true and route accordingly
         } catch (error) {
             console.error("❌ Error during login storage process:", error);
         }
     },
 
+    // Add this method for regular login (not from registration)
+    loginRegular: async (accessToken: string, refreshToken: string, user: User) => {
+        // Same as login but sets isNewRegistration: false
+        try {
+            if (!accessToken || !refreshToken || !user) return;
+
+            await Promise.all([
+                SecureStorage.setItem(AUTH_TOKEN_KEY, String(accessToken)),
+                storage.set(USER_KEY, JSON.stringify(user)),
+                SecureStorage.setItem(REFRESH_TOKEN_KEY, String(refreshToken))
+            ]);
+
+            set({ 
+                user, 
+                isAuthenticated: true,
+                isNewRegistration: false // Not a new registration
+            });
+        } catch (error) {
+            console.error("❌ Error during login storage process:", error);
+        }
+    },
+
+    clearNewRegistration: () => {
+        set({ isNewRegistration: false });
+    },
+
     logout: async () => {
         try {
-            // Try to call the logout API (ignore errors)
             await api_logout_safe();
         } catch { }
 
@@ -68,25 +94,43 @@ export const useAuth = create<AuthState>((set, get) => ({
         await storage.delete(USER_KEY);
         await SecureStorage.removeItem(REFRESH_TOKEN_KEY);
 
-        set({ user: null, isAuthenticated: false });
+        set({ 
+            user: null, 
+            isAuthenticated: false,
+            isNewRegistration: false 
+        });
         router.replace('/(auth)/login');
     },
 
     hydrate: async () => {
         try {
-            // MUST await these because we moved from MMKV to AsyncStorage
             const token = await SecureStorage.getItem(AUTH_TOKEN_KEY);
             const userStr = await storage.getString(USER_KEY);
 
             if (token && userStr) {
                 const user = JSON.parse(userStr);
-                set({ user, isAuthenticated: true, isLoading: false });
+                set({ 
+                    user, 
+                    isAuthenticated: true, 
+                    isLoading: false,
+                    isNewRegistration: false // Reset on hydration
+                });
             } else {
-                set({ user: null, isAuthenticated: false, isLoading: false });
+                set({ 
+                    user: null, 
+                    isAuthenticated: false, 
+                    isLoading: false,
+                    isNewRegistration: false 
+                });
             }
         } catch (e) {
             console.error("Hydration failed:", e);
-            set({ user: null, isAuthenticated: false, isLoading: false });
+            set({ 
+                user: null, 
+                isAuthenticated: false, 
+                isLoading: false,
+                isNewRegistration: false 
+            });
         }
     },
 
@@ -95,7 +139,6 @@ export const useAuth = create<AuthState>((set, get) => ({
         if (current) {
             const updated = { ...current, ...partial };
             set({ user: updated });
-            // Persist to storage
             storage.set(USER_KEY, JSON.stringify(updated));
         }
     },

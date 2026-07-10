@@ -9,7 +9,8 @@ import {
     Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { LucideUploadCloud, LucideCamera, LucideFile, LucideX, LucideCheck } from 'lucide-react-native';
+import * as DocumentPicker from 'expo-document-picker';
+import { LucideUploadCloud, LucideCamera, LucideFile, LucideX, LucideCheck, LucideFolderOpen } from 'lucide-react-native';
 import { api, UPLOAD_FILE_PATH } from '../../lib/api';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -32,11 +33,13 @@ interface FileUploadProps {
     /** An already-uploaded file to display as the initial state */
     initialFile?: UploadedFile | null;
     /** Accepted MIME types */
-    accept?: ('image/*' | 'application/pdf')[];
+    accept?: string[];
     /** Error message to display */
     error?: string;
     /** Disable the upload area */
     disabled?: boolean;
+    /** Allow multiple file types */
+    allowMultiple?: boolean;
 }
 
 export function FileUpload({
@@ -44,14 +47,28 @@ export function FileUpload({
     onUpload,
     onRemove,
     initialFile = null,
-    accept = ['image/*', 'application/pdf'],
+    accept = ['image/*', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
     error,
     disabled = false,
+    allowMultiple = false,
 }: FileUploadProps) {
     const [file, setFile] = useState<UploadedFile | null>(initialFile);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
 
+    // Check if file type is allowed
+    const isFileTypeAllowed = (mimeType: string): boolean => {
+        if (accept.includes('*/*')) return true;
+        return accept.some(accepted => {
+            if (accepted.endsWith('/*')) {
+                const prefix = accepted.replace('/*', '');
+                return mimeType.startsWith(prefix);
+            }
+            return accepted === mimeType;
+        });
+    };
+
+    // Pick from gallery (images only)
     const pickFromGallery = useCallback(async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -70,6 +87,7 @@ export function FileUpload({
         }
     }, []);
 
+    // Pick from camera (images only)
     const pickFromCamera = useCallback(async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
@@ -86,6 +104,68 @@ export function FileUpload({
             await handleSelectedAsset(result.assets[0]);
         }
     }, []);
+
+    // Pick from documents (PDF, Word, etc.)
+    const pickFromDocuments = useCallback(async () => {
+        try {
+            // Request permissions for Android
+            if (Platform.OS === 'android') {
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+                if (status !== 'granted') {
+                    Alert.alert('Permission Required', 'Please grant storage access to upload documents.');
+                    return;
+                }
+            }
+
+            const result = await DocumentPicker.getDocumentAsync({
+                type: accept,
+                copyToCacheDirectory: true,
+                multiple: allowMultiple,
+            });
+
+            if (result.canceled) {
+                return;
+            }
+
+            const assets = result.assets || [];
+            
+            // Handle single or multiple files
+            if (assets.length > 0) {
+                // For now, handle only the first file
+                // If you need multiple files, you'll need to modify the state to handle arrays
+                const asset = assets[0];
+                
+                // Validate file type
+                if (!isFileTypeAllowed(asset.mimeType || '')) {
+                    Alert.alert(
+                        'Invalid File Type',
+                        `Please select a valid file type: ${accept.join(', ')}`
+                    );
+                    return;
+                }
+
+                // Validate file size
+                const fileSize = asset.size || 0;
+                if (fileSize > MAX_FILE_SIZE) {
+                    Alert.alert('File Too Large', 'File must be under 5 MB.');
+                    return;
+                }
+
+                const uploadFile: UploadedFile = {
+                    uri: asset.uri,
+                    name: asset.name || `document_${Date.now()}`,
+                    type: asset.mimeType || 'application/octet-stream',
+                    size: fileSize,
+                };
+
+                setFile(uploadFile);
+                await uploadToServer(uploadFile);
+            }
+        } catch (error) {
+            console.error('Document picker error:', error);
+            Alert.alert('Error', 'Failed to pick document. Please try again.');
+        }
+    }, [accept, allowMultiple]);
 
     const handleSelectedAsset = async (asset: ImagePicker.ImagePickerAsset) => {
         const fileSize = asset.fileSize || 0;
@@ -114,14 +194,20 @@ export function FileUpload({
 
         try {
             const formData = new FormData();
-            formData.append('file', {
+            
+            // For React Native, we need to append the file properly
+            const fileData: any = {
                 uri: fileToUpload.uri,
                 name: fileToUpload.name,
                 type: fileToUpload.type,
-            } as any);
+            };
+            
+            formData.append('file', fileData);
 
             const response = await api.post(UPLOAD_FILE_PATH, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+                headers: { 
+                    'Content-Type': 'multipart/form-data',
+                },
                 onUploadProgress: (progressEvent) => {
                     if (progressEvent.total) {
                         const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -131,7 +217,9 @@ export function FileUpload({
             });
 
             if (response.data.success) {
-                const serverPath = response.data.data?.filePath || response.data.data?.path || response.data.data?.url;
+                const serverPath = response.data.data?.filePath || 
+                                  response.data.data?.path || 
+                                  response.data.data?.url;
                 const uploaded: UploadedFile = { ...fileToUpload, serverPath };
                 setFile(uploaded);
                 onUpload?.(uploaded);
@@ -155,11 +243,43 @@ export function FileUpload({
     };
 
     const showPicker = () => {
-        Alert.alert('Upload File', 'Choose a source', [
-            { text: 'Camera', onPress: pickFromCamera },
-            { text: 'Gallery', onPress: pickFromGallery },
-            { text: 'Cancel', style: 'cancel' },
-        ]);
+        // Build options based on what's accepted
+        const options: any[] = [];
+        
+        // If images are accepted, show camera and gallery
+        const acceptsImages = accept.some(a => a.startsWith('image/'));
+        const acceptsDocuments = accept.some(a => 
+            a.includes('pdf') || 
+            a.includes('document') || 
+            a.includes('word') ||
+            a.includes('text')
+        );
+
+        if (acceptsImages) {
+            options.push(
+                { text: 'Take Photo', onPress: pickFromCamera },
+                { text: 'Choose from Gallery', onPress: pickFromGallery }
+            );
+        }
+
+        if (acceptsDocuments) {
+            options.push(
+                { text: 'Choose Document', onPress: pickFromDocuments }
+            );
+        }
+
+        // If no specific types, show all options
+        if (options.length === 0) {
+            options.push(
+                { text: 'Take Photo', onPress: pickFromCamera },
+                { text: 'Choose from Gallery', onPress: pickFromGallery },
+                { text: 'Choose Document', onPress: pickFromDocuments }
+            );
+        }
+
+        options.push({ text: 'Cancel', style: 'cancel' });
+
+        Alert.alert('Upload File', 'Choose a source', options);
     };
 
     const isImage = file?.type?.startsWith('image/');
@@ -171,7 +291,7 @@ export function FileUpload({
             {file ? (
                 /* ───── File Preview ───── */
                 <View className="border border-border rounded-lg overflow-hidden bg-card">
-                    {isImage && (
+                    {isImage && file.uri && (
                         <Image
                             source={{ uri: file.uri }}
                             className="w-full h-40"
@@ -236,10 +356,13 @@ export function FileUpload({
                 >
                     <LucideUploadCloud size={32} color="hsl(220 9% 46%)" />
                     <Text className="text-sm text-muted-foreground mt-2 text-center">
-                        Tap to upload a photo or document
+                        Tap to upload a file
                     </Text>
                     <Text className="text-xs text-muted-foreground mt-1">
-                        Images or PDF · Max 5 MB
+                        {accept.includes('image/*') && 'Images · '}
+                        {accept.some(a => a.includes('pdf')) && 'PDF · '}
+                        {accept.some(a => a.includes('document') || a.includes('word')) && 'Documents · '}
+                        Max 5 MB
                     </Text>
                 </TouchableOpacity>
             )}

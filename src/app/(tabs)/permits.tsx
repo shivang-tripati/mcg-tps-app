@@ -156,9 +156,6 @@ export default function PermitsScreen() {
             <View className="px-6 pt-2 pb-5 bg-primary rounded-b-[24px]">
                 <View className="flex-row items-center justify-between">
                     <View>
-                        <Text className="text-white/80 text-xs font-semibold uppercase tracking-wider">
-                            Your permits
-                        </Text>
                         <Text className="text-white text-2xl font-bold mt-1">Permits</Text>
                     </View>
                     <View className="flex-row items-center gap-1">

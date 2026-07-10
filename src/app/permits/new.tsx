@@ -615,7 +615,7 @@ export default function NewPermitScreen() {
                                     minimumDate={validFrom ? parseDateTimeField(validFrom) : new Date()}
                                 />
 
-                                <Text className="text-sm font-medium text-foreground mb-2">Waste evidence (optional, max 3)</Text>
+                                <Text className="text-sm font-medium text-foreground mb-2">Waste evidence (max 3)</Text>
                                 <View className="flex-row flex-wrap gap-2 mb-4">
                                     {evidenceUris.map((uri, i) => (
                                         <View key={`${uri}-${i}`} className="relative">

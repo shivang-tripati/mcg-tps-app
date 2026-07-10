@@ -1,9 +1,9 @@
-import { View, Text, TouchableOpacity, Alert, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LucideEye, LucideEyeOff } from 'lucide-react-native';
 import { useAuth } from '../../lib/auth-store';
 import { api } from '../../lib/api';
@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { KeyboardAwareScreen } from '../../components/ui/keyboard-aware-screen';
 import { registerSchema } from '../../schemas/index';
+import { showToast } from '../../lib/toast';
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
@@ -21,7 +22,9 @@ const ROLE_OPTIONS = [
 
 export default function RegisterScreen() {
     const router = useRouter();
-    const { login } = useAuth();
+    const { login, clearNewRegistration } = useAuth();
+    const [error, setError] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
     const emailRef = useRef<TextInput>(null);
     const phoneRef = useRef<TextInput>(null);
@@ -42,8 +45,10 @@ export default function RegisterScreen() {
     const selectedRole = watch('role');
 
     const onSubmit = async (data: RegisterFormData) => {
+        setError(null);
+        setIsLoading(true);
+        
         try {
-            // Clean up empty optional fields
             const payload: any = {
                 name: data.name,
                 email: data.email,
@@ -58,17 +63,59 @@ export default function RegisterScreen() {
 
             if (response.data.success) {
                 const { accessToken, refreshToken, user } = response.data.data;
+                
+                // Show success toast
+                showToast.success(
+                    'Account Created Successfully! 🎉',
+                    `Welcome ${user.name}! Redirecting to setup...`
+                );
+                
+                // Auto-login the user
                 await login(accessToken, refreshToken, user);
-                // Navigation handled by auth-store / root layout
+                
+                // The RootLayout will handle navigation
             } else {
-                Alert.alert('Registration Failed', response.data.error?.message || 'Unknown error');
+                const message = response.data.error?.message || 'Registration failed';
+                setError(message);
+                showToast.error('Registration Failed', message);
             }
-        } catch (error: any) {
-            console.error(error);
-            const message = error.response?.data?.error?.message || 'Network error or server unavailable';
-            Alert.alert('Error', message);
+        } catch (err: any) {
+            console.error('Registration error:', err);
+            
+            let message = 'Registration failed. Please try again.';
+            let description = '';
+            
+            if (err.response?.data) {
+                const errorData = err.response.data;
+                if (errorData.error?.message) {
+                    message = errorData.error.message;
+                    description = errorData.error.details || 'Please check your information and try again';
+                } else if (errorData.message) {
+                    message = errorData.message;
+                }
+            } else if (err.message) {
+                if (err.message === 'Network Error' || err.code === 'ECONNABORTED') {
+                    message = 'Network Error';
+                    description = 'Please check your internet connection';
+                } else {
+                    message = 'Registration Failed';
+                    description = err.message;
+                }
+            }
+            
+            setError(message);
+            showToast.error(message, description);
+        } finally {
+            setIsLoading(false);
         }
     };
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            clearNewRegistration();
+        };
+    }, []);
 
     return (
         <KeyboardAwareScreen className="flex-1 bg-background" scrollable>
@@ -78,8 +125,8 @@ export default function RegisterScreen() {
                     <Text className="text-muted-foreground">Join MCG to manage your permits</Text>
                 </View>
 
+                {/* Remove error display - now using toasts */}
                 <View className="space-y-4">
-                    {/* Name */}
                     <Controller
                         control={control}
                         name="name"
@@ -99,7 +146,6 @@ export default function RegisterScreen() {
                         )}
                     />
 
-                    {/* Email */}
                     <Controller
                         control={control}
                         name="email"
@@ -107,7 +153,7 @@ export default function RegisterScreen() {
                             <Input
                                 ref={emailRef}
                                 label="Email"
-                                placeholder="Enter your email"
+                                placeholder="you@example.com"
                                 onBlur={onBlur}
                                 onChangeText={onChange}
                                 value={value}
@@ -121,7 +167,6 @@ export default function RegisterScreen() {
                         )}
                     />
 
-                    {/* Phone (optional) */}
                     <Controller
                         control={control}
                         name="phone"
@@ -142,7 +187,6 @@ export default function RegisterScreen() {
                         )}
                     />
 
-                    {/* Password */}
                     <Controller
                         control={control}
                         name="password"
@@ -150,7 +194,7 @@ export default function RegisterScreen() {
                             <Input
                                 ref={passwordRef}
                                 label="Password"
-                                placeholder="Min 8 chars, 1 upper, 1 lower, 1 number"
+                                placeholder="Min 8 chars"
                                 onBlur={onBlur}
                                 onChangeText={onChange}
                                 value={value}
@@ -161,14 +205,11 @@ export default function RegisterScreen() {
                                     <TouchableOpacity 
                                         onPress={() => setShowPassword(!showPassword)}
                                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                        accessible={true}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={showPassword ? "Hide password" : "Show password"}
                                     >
                                         {showPassword ? (
-                                            <LucideEyeOff size={20} color="hsl(220 9% 46%)" />
+                                            <LucideEyeOff size={20} color="#737373" />
                                         ) : (
-                                            <LucideEye size={20} color="hsl(220 9% 46%)" />
+                                            <LucideEye size={20} color="#737373" />
                                         )}
                                     </TouchableOpacity>
                                 }
@@ -229,9 +270,9 @@ export default function RegisterScreen() {
                     </View>
 
                     <Button
-                        label={isSubmitting ? "Creating Account..." : "Sign Up"}
+                        label={isSubmitting || isLoading ? "Creating Account..." : "Sign Up"}
                         onPress={handleSubmit(onSubmit)}
-                        loading={isSubmitting}
+                        loading={isSubmitting || isLoading}
                         className="mt-2"
                     />
                 </View>

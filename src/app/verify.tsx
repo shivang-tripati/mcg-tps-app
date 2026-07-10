@@ -11,22 +11,21 @@ import {
     LucideCheckCircle,
     LucideXCircle,
     LucideFileText,
-    LucideUser,
-    LucideBuilding2,
-    LucideFactory,
-    LucideTruck,
-    LucideCalendar,
     LucideArrowLeft,
     LucideKeyboard,
-    LucideShield,
-    LucidePackage,
-    LucideMapPin,
-    LucideClock,
-    LucideWeight,
-    LucideHash
+    Scan,
+    Truck,
+    Package,
+    Weight,
+    User,
+    Clock,
+    Building2,
+    AlertCircle
 } from 'lucide-react-native';
 import { Button } from '../components/ui/button';
+import { TimeRemainingCard } from '../components/ui/time-remaining-card';
 import axios from 'axios';
+import { formatDate, formatDateTime, calculateTimeLeft } from '../lib/utils';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -62,6 +61,21 @@ interface VerifiedPermit {
     };
 }
 
+// ✅ Move getReasonText outside the component
+const getReasonText = (validityStatus: string): string => {
+    switch (validityStatus) {
+        case 'EXPIRED': return 'PERMIT EXPIRED';
+        case 'NOT_YET_VALID': return 'NOT YET ACTIVE';
+        case 'REVOKED': return 'PERMIT REVOKED';
+        case 'SUSPENDED': return 'PERMIT SUSPENDED';
+        case 'INACTIVE': return 'PERMIT INACTIVE';
+        case 'PENDING': return 'PENDING APPROVAL';
+        case 'REJECTED': return 'PERMIT REJECTED';
+        case 'NA': return 'NOT AVAILABLE';
+        default: return validityStatus || 'INVALID STATUS';
+    }
+};
+
 export default function VerifyScreen() {
     const router = useRouter();
     const isFocused = useIsFocused();
@@ -90,9 +104,6 @@ export default function VerifyScreen() {
 
         try {
             // Extract token from QR code or manual input
-            // Expected formats:
-            // - https://example.com/verify/{token}
-            // - Just the token UUID
             const tokenMatch = data.match(/verify\/([a-f0-9-]{36})/i) ||
                 data.match(/token=([a-f0-9-]{36})/i) ||
                 data.match(/^([a-f0-9-]{36})$/i);
@@ -111,8 +122,8 @@ export default function VerifyScreen() {
             if (response.data.success) {
                 setVerifiedPermit(response.data.data);
                 Haptics.notificationAsync(
-                    response.data.data.verification.isActive 
-                        ? Haptics.NotificationFeedbackType.Success 
+                    response.data.data.verification.isActive
+                        ? Haptics.NotificationFeedbackType.Success
                         : Haptics.NotificationFeedbackType.Error
                 );
             } else {
@@ -137,7 +148,7 @@ export default function VerifyScreen() {
         const cleanedToken = manualToken.trim();
         if (!cleanedToken) {
             setError('Please enter a token');
-            setScanned(true); // To show error view
+            setScanned(true);
             return;
         }
 
@@ -183,14 +194,6 @@ export default function VerifyScreen() {
         };
     };
 
-    const getReasonText = (validityStatus: string) => {
-        switch (validityStatus) {
-            case 'EXPIRED': return 'EXPIRED';
-            case 'NOT_YET_VALID': return 'NOT YET ACTIVE';
-            default: return 'REJECTED / BLACKLISTED';
-        }
-    };
-
     if (hasPermission === null) {
         return (
             <SafeAreaView className="flex-1 bg-background items-center justify-center">
@@ -208,10 +211,10 @@ export default function VerifyScreen() {
                 <Text className="text-muted-foreground mt-2 text-center mb-6">
                     Please enable camera permissions in your device settings to scan QR codes.
                 </Text>
-                
-                <Button 
-                    label="Open Settings" 
-                    onPress={() => Linking.openSettings()} 
+
+                <Button
+                    label="Open Settings"
+                    onPress={() => Linking.openSettings()}
                     className="w-full mb-4"
                 />
 
@@ -238,337 +241,513 @@ export default function VerifyScreen() {
         const isActive = verification?.isActive ?? false;
         const vStyle = verifiedPermit ? getVerificationStyle(isActive) : null;
         const StatusIcon = vStyle?.icon || LucideFileText;
-        const timeLeft = verification?.timeRemaining;
+
+        // ✅ Calculate timeLeft with proper properties using the utility function
+        const timeLeft = calculateTimeLeft(
+            verifiedPermit?.validFrom,
+            verifiedPermit?.validUntil
+        );
+
         const auditTime = verification?.checkedAt
             ? new Date(verification.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase()
             : new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase();
 
         return (
             <SafeAreaView className="flex-1" style={{ backgroundColor: '#f1f5f9' }}>
-                {/* Header */}
-                <View className="px-4 py-4 flex-row items-center bg-primary">
-                    <TouchableOpacity onPress={resetScanner} className="mr-3" style={{ padding: 4 }}>
-                        <LucideArrowLeft size={22} color="white" />
-                    </TouchableOpacity>
-                    <View className="flex-1">
-                        <Text className="text-white text-lg font-bold">Verification Result</Text>
-                        <Text style={{ color: 'rgba(255,255,255,0.6)' }} className="text-xs">Permit details</Text>
-                    </View>
+                {/* ═══════════════════════════════════════ */}
+{/* HEADER - Enhanced with better hierarchy */}
+{/* ═══════════════════════════════════════ */}
+<View style={{
+    backgroundColor: '#8F1D3F',
+    paddingTop: Platform.OS === 'ios' ? 48 : 16,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+}}>
+    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TouchableOpacity 
+            onPress={resetScanner} 
+            style={{ 
+                padding: 8,
+                marginRight: 12,
+                borderRadius: 12,
+                backgroundColor: 'rgba(255,255,255,0.15)',
+            }}
+            activeOpacity={0.7}
+        >
+            <LucideArrowLeft size={22} color="white" />
+        </TouchableOpacity>
+        
+        <View style={{ flex: 1 }}>
+            <Text style={{ 
+                color: 'white', 
+                fontSize: 20, 
+                fontWeight: '700',
+                letterSpacing: 0.3,
+            }}>
+                Verification Result
+            </Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <View style={{ 
+                    width: 6, 
+                    height: 6, 
+                    borderRadius: 3, 
+                    backgroundColor: isActive ? '#4ade80' : '#fca5a5' 
+                }} />
+                <Text style={{ 
+                    color: 'rgba(255,255,255,0.7)', 
+                    fontSize: 12,
+                    fontWeight: '500',
+                }}>
+                    {isActive ? 'Active Permit' : 'Inactive Permit'}
+                </Text>
+                <Text style={{ 
+                    color: 'rgba(255,255,255,0.3)', 
+                    fontSize: 12,
+                }}>
+                    •
+                </Text>
+                <Text style={{ 
+                    color: 'rgba(255,255,255,0.5)', 
+                    fontSize: 12,
+                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                }}>
+                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+            </View>
+        </View>
+
+        {/* Optional: Quick action button */}
+        <TouchableOpacity 
+            style={{ 
+                padding: 8,
+                borderRadius: 12,
+                backgroundColor: 'rgba(255,255,255,0.1)',
+            }}
+            onPress={resetScanner}
+            activeOpacity={0.7}
+        >
+            <LucideScan size={20} color="rgba(255,255,255,0.8)" />
+        </TouchableOpacity>
+    </View>
+</View>
+
+{/* ═══════════════════════════════════════ */}
+{/* MAIN CONTENT */}
+{/* ═══════════════════════════════════════ */}
+<ScrollView 
+    className="flex-1" 
+    contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 16, paddingTop: 16 }}
+    showsVerticalScrollIndicator={false}
+>
+    {error ? (
+        /* ─── Error State ─── */
+        <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 40 }}>
+            <View style={{
+                backgroundColor: 'white',
+                borderRadius: 20,
+                padding: 32,
+                alignItems: 'center',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 4 },
+                shadowOpacity: 0.06,
+                shadowRadius: 16,
+                elevation: 4,
+            }}>
+                <View style={{
+                    backgroundColor: '#fee2e2',
+                    borderRadius: 60,
+                    padding: 20,
+                    marginBottom: 16,
+                }}>
+                    <LucideXCircle size={56} color="#dc2626" />
+                </View>
+                
+                <Text style={{ 
+                    fontSize: 24, 
+                    fontWeight: '700', 
+                    color: '#1e293b',
+                    marginBottom: 4,
+                }}>
+                    Verification Failed
+                </Text>
+                
+                <View style={{
+                    backgroundColor: '#fee2e2',
+                    paddingHorizontal: 16,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    marginBottom: 12,
+                }}>
+                    <Text style={{ 
+                        color: '#dc2626', 
+                        fontSize: 10, 
+                        fontWeight: '700',
+                        letterSpacing: 1.5,
+                    }}>
+                        ERROR
+                    </Text>
+                </View>
+                
+                <Text style={{ 
+                    color: '#64748b', 
+                    textAlign: 'center',
+                    lineHeight: 22,
+                    marginBottom: 24,
+                }}>
+                    {error}
+                </Text>
+                
+                <TouchableOpacity
+                    style={{
+                        backgroundColor: '#dc2626',
+                        paddingVertical: 14,
+                        paddingHorizontal: 32,
+                        borderRadius: 12,
+                        width: '100%',
+                        alignItems: 'center',
+                        flexDirection: 'row',
+                        justifyContent: 'center',
+                        gap: 8,
+                    }}
+                    onPress={resetScanner}
+                    activeOpacity={0.8}
+                >
+                    <LucideArrowLeft size={18} color="white" />
+                    <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>
+                        Try Again
+                    </Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+    ) : verifiedPermit && vStyle && verification ? (
+        <>
+            {/* ─── HERO STATUS CARD ─── */}
+            <View style={{
+                backgroundColor: 'white',
+                borderRadius: 20,
+                padding: 24,
+                alignItems: 'center',
+                marginBottom: 16,
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.04,
+                shadowRadius: 12,
+                elevation: 3,
+                borderWidth: 1,
+                borderColor: '#f1f5f9',
+            }}>
+                {/* Status Badge */}
+                <View style={{
+                    backgroundColor: vStyle.iconBg,
+                    borderRadius: 50,
+                    padding: 16,
+                    marginBottom: 12,
+                }}>
+                    <StatusIcon size={44} color={vStyle.iconColor} />
                 </View>
 
-                <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 100 }}>
-                    {error ? (
-                        <View className="p-4">
-                            {/* Error Hero Card */}
-                            <View className="bg-white rounded-2xl p-8 items-center" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 12, elevation: 3 }}>
-                                <View style={{ backgroundColor: '#fee2e2', borderRadius: 50, padding: 16 }}>
-                                    <LucideXCircle size={48} color="#dc2626" />
-                                </View>
-                                <Text className="text-xl font-bold mt-5" style={{ color: '#1e293b' }}>Verification Failed</Text>
-                                <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 6, marginTop: 8 }}>
-                                    <Text style={{ color: '#dc2626', fontSize: 11, fontWeight: '700', letterSpacing: 1 }}>ERROR</Text>
-                                </View>
-                                <Text className="mt-4 text-center" style={{ color: '#64748b', lineHeight: 20 }}>{error}</Text>
-                                <TouchableOpacity
-                                    style={{ backgroundColor: '#dc2626', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12, marginTop: 24, width: '100%', alignItems: 'center' }}
-                                    onPress={resetScanner}
-                                >
-                                    <Text className="text-white font-semibold">Try Again</Text>
-                                </TouchableOpacity>
-                            </View>
+                {/* Status Title */}
+                <Text style={{ 
+                    fontSize: 22, 
+                    fontWeight: '700', 
+                    color: '#1e293b',
+                    marginBottom: 4,
+                }}>
+                    {vStyle.title}
+                </Text>
+                
+                {/* Status Chip */}
+                <View style={{
+                    backgroundColor: vStyle.badgeBg,
+                    paddingHorizontal: 14,
+                    paddingVertical: 4,
+                    borderRadius: 20,
+                    marginBottom: 12,
+                }}>
+                    <Text style={{ 
+                        color: vStyle.badgeText, 
+                        fontSize: 11, 
+                        fontWeight: '700',
+                        letterSpacing: 0.5,
+                    }}>
+                        {verification.validityStatus.replace(/_/g, ' ')}
+                    </Text>
+                </View>
+
+                {/* Divider */}
+                <View style={{
+                    width: 40,
+                    height: 2,
+                    backgroundColor: '#e2e8f0',
+                    borderRadius: 1,
+                    marginVertical: 8,
+                }} />
+
+                {/* Permit Number */}
+                <Text style={{
+                    color: '#0f172a',
+                    fontSize: 18,
+                    fontWeight: '700',
+                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                    letterSpacing: 0.5,
+                    marginBottom: 4,
+                }}>
+                    {verifiedPermit.permitNumber}
+                </Text>
+                
+                {/* Token ID */}
+                <Text style={{
+                    color: '#94a3b8',
+                    fontSize: 12,
+                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                }}>
+                    Token: {verifiedPermit.id.substring(0, 14)}...
+                </Text>
+
+                {/* ─── TIME REMAINING ─── */}
+                {isActive && timeLeft && (
+                    <View style={{ width: '100%', marginTop: 12 }}>
+                        <TimeRemainingCard 
+                            timeLeft={timeLeft}
+                            expiryDate={verifiedPermit?.validUntil || undefined}
+                            isExpired={timeLeft.percentage === 0}
+                        />
+                    </View>
+                )}
+
+                {/* ─── INACTIVE REASON ─── */}
+                {!isActive && (
+                    <View style={{
+                        marginTop: 12,
+                        width: '100%',
+                        padding: 12,
+                        backgroundColor: '#fef2f2',
+                        borderRadius: 10,
+                        borderWidth: 1,
+                        borderColor: '#fecaca',
+                        alignItems: 'center',
+                    }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <AlertCircle size={16} color="#dc2626" />
+                            <Text style={{ color: '#dc2626', fontSize: 13, fontWeight: '600' }}>
+                                {getReasonText(verification.validityStatus)}
+                            </Text>
                         </View>
-                    ) : verifiedPermit && vStyle && verification ? (
-                        <View className="p-4">
-                            {/* ═══════════════════════════════════════ */}
-                            {/* HERO STATUS CARD */}
-                            {/* ═══════════════════════════════════════ */}
-                            <View className="bg-white rounded-2xl p-6 items-center mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 12, elevation: 3, overflow: 'hidden' }}>
-                                {/* Status Icon */}
-                                <View style={{ backgroundColor: vStyle.iconBg, borderRadius: 50, padding: 16 }}>
-                                    <StatusIcon size={40} color={vStyle.iconColor} />
-                                </View>
+                        {verifiedPermit?.validUntil && (
+                            <Text style={{ color: '#b91c1c', fontSize: 11, marginTop: 4 }}>
+                                Expired: {formatDateTime(verifiedPermit.validUntil)}
+                            </Text>
+                        )}
+                    </View>
+                )}
+            </View>
 
-                                {/* Status Title + Badge */}
-                                <View className="flex-row items-center mt-4" style={{ gap: 8 }}>
-                                    <Text className="text-xl font-bold" style={{ color: '#1e293b' }}>
-                                        {vStyle.title}
-                                    </Text>
-                                    <View style={{ backgroundColor: vStyle.badgeBg, paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6 }}>
-                                        <Text style={{ color: vStyle.badgeText, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 }}>
-                                            {verification.validityStatus.replace('_', ' ')}
-                                        </Text>
-                                    </View>
-                                </View>
+            {/* ─── PERMIT DETAILS CARD ─── */}
+            <View style={{
+                backgroundColor: 'white',
+                borderRadius: 16,
+                padding: 16,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: '#f1f5f9',
+            }}>
+                <Text style={{
+                    color: '#94a3b8',
+                    fontSize: 11,
+                    fontWeight: '600',
+                    letterSpacing: 0.8,
+                    textTransform: 'uppercase',
+                    marginBottom: 12,
+                }}>
+                    Permit Details
+                </Text>
 
-                                {/* Permit Number & Token ID */}
-                                <View className="flex-row items-center mt-3" style={{ gap: 16 }}>
-                                    <Text style={{ color: '#64748b', fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-                                        {verifiedPermit.permitNumber}
-                                    </Text>
-                                    <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: '#cbd5e1' }} />
-                                    <Text style={{ color: '#94a3b8', fontSize: 11, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-                                        TOKEN ID: {verifiedPermit.id.substring(0, 14)}...
-                                    </Text>
-                                </View>
+                {/* Details Grid */}
+                <View style={{ gap: 12 }}>
+                    {verifiedPermit.vehicleNumber && (
+                        <DetailRow 
+                            icon={Truck} 
+                            label="Vehicle" 
+                            value={verifiedPermit.vehicleNumber} 
+                            monospace 
+                        />
+                    )}
+                    {verifiedPermit.driverName && (
+                        <DetailRow 
+                            icon={User} 
+                            label="Driver" 
+                            value={verifiedPermit.driverName} 
+                        />
+                    )}
+                    <DetailRow 
+                        icon={Package} 
+                        label="Material" 
+                        value={verifiedPermit.wasteType.replace(/_/g, ' ')} 
+                    />
+                    {verifiedPermit.estimatedWeight && (
+                        <DetailRow 
+                            icon={Weight} 
+                            label="Est. Weight" 
+                            value={`${verifiedPermit.estimatedWeight} kg`} 
+                        />
+                    )}
+                </View>
+            </View>
 
-                                {/* Time Remaining (when active) */}
-                                {isActive && timeLeft && (
-                                    <View style={{
-                                        backgroundColor: '#1e293b',
-                                        borderRadius: 14,
-                                        paddingVertical: 14,
-                                        paddingHorizontal: 24,
-                                        marginTop: 16,
-                                        width: '100%',
-                                        alignItems: 'center',
-                                    }}>
-                                        <Text style={{ color: '#64748b', fontSize: 9, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase' }}>Time Remaining</Text>
-                                        <Text style={{ color: 'white', fontSize: 26, fontWeight: '700', marginTop: 4, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', letterSpacing: -1 }}>
-                                            {timeLeft.text}
-                                        </Text>
-                                    </View>
-                                )}
+            {/* ─── SECURITY & OPS ─── */}
+            {(verifiedPermit.plant || verifiedPermit.validFrom || verifiedPermit.validUntil) && (
+                <View style={{
+                    backgroundColor: 'white',
+                    borderRadius: 16,
+                    padding: 16,
+                    marginBottom: 16,
+                    borderWidth: 1,
+                    borderColor: '#f1f5f9',
+                }}>
+                    <Text style={{
+                        color: '#94a3b8',
+                        fontSize: 11,
+                        fontWeight: '600',
+                        letterSpacing: 0.8,
+                        textTransform: 'uppercase',
+                        marginBottom: 12,
+                    }}>
+                        Security & Operations
+                    </Text>
 
-                                {/* Reason Banner (when inactive) */}
-                                {!isActive && (
-                                    <View style={{ backgroundColor: '#fee2e2', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12, marginTop: 16, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#fecaca' }}>
-                                        <Text style={{ color: '#dc2626', fontSize: 13, fontWeight: '700', letterSpacing: 1 }}>
-                                            REASON: {getReasonText(verification.validityStatus)}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-
-                            {/* ═══════════════════════════════════════ */}
-                            {/* PERMIT PAYLOAD DETAILS */}
-                            {/* ═══════════════════════════════════════ */}
-                            <View className="bg-white rounded-2xl mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
-                                {/* Section Header */}
-                                <View className="flex-row items-center justify-between px-5 pt-5 pb-3">
-                                    <Text style={{ color: '#1e293b', fontSize: 12, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' }}>
-                                        Permit Payload Details
-                                    </Text>
-                                    <View className="flex-row items-center" style={{ gap: 6 }}>
-                                        <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#22c55e' }} />
-                                        <Text style={{ color: '#64748b', fontSize: 11, fontWeight: '600' }}>Electronic Manifest</Text>
-                                    </View>
-                                </View>
-
-                                <View style={{ height: 1, backgroundColor: '#f1f5f9', marginHorizontal: 20 }} />
-
-                                {/* Payload Items */}
-                                <View className="px-5 py-4" style={{ gap: 20 }}>
-                                    {/* Vehicle / Fleet */}
-                                    {verifiedPermit.vehicleNumber && (
-                                        <View className="flex-row items-start" style={{ gap: 14 }}>
-                                            <View style={{ backgroundColor: '#f1f5f9', borderRadius: 10, padding: 8, marginTop: 2 }}>
-                                                <LucideTruck size={18} color="#64748b" />
-                                            </View>
-                                            <View>
-                                                <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' }}>Vehicle / Fleet</Text>
-                                                <Text style={{ color: '#1e293b', fontSize: 16, fontWeight: '700', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-                                                    {verifiedPermit.vehicleNumber}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
-
-                                    {/* Authorized Driver */}
-                                    {verifiedPermit.driverName && (
-                                        <View className="flex-row items-start" style={{ gap: 14 }}>
-                                            <View style={{ backgroundColor: '#f1f5f9', borderRadius: 10, padding: 8, marginTop: 2 }}>
-                                                <LucideUser size={18} color="#64748b" />
-                                            </View>
-                                            <View>
-                                                <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' }}>Authorized Driver</Text>
-                                                <Text style={{ color: '#1e293b', fontSize: 16, fontWeight: '600', marginTop: 2 }}>
-                                                    {verifiedPermit.driverName}
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
-
-                                    {/* Consolidated ID (Permit Number) */}
-                                    <View className="flex-row items-start" style={{ gap: 14 }}>
-                                        <View style={{ backgroundColor: '#f1f5f9', borderRadius: 10, padding: 8, marginTop: 2 }}>
-                                            <LucideHash size={18} color="#64748b" />
-                                        </View>
-                                        <View>
-                                            <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' }}>Consolidated ID</Text>
-                                            <Text style={{ color: '#1e293b', fontSize: 16, fontWeight: '700', marginTop: 2, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' }}>
-                                                {verifiedPermit.permitNumber}
-                                            </Text>
-                                        </View>
-                                    </View>
-
-                                    {/* Material Category */}
-                                    <View className="flex-row items-start" style={{ gap: 14 }}>
-                                        <View style={{ backgroundColor: '#f1f5f9', borderRadius: 10, padding: 8, marginTop: 2 }}>
-                                            <LucidePackage size={18} color="#64748b" />
-                                        </View>
-                                        <View>
-                                            <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' }}>Material Category</Text>
-                                            <Text style={{ color: '#1e293b', fontSize: 16, fontWeight: '700', marginTop: 2 }}>
-                                                {verifiedPermit.wasteType.replace(/_/g, ' ')}
-                                            </Text>
-                                        </View>
-                                    </View>
-
-                                    {/* Load Estimate */}
-                                    {verifiedPermit.estimatedWeight && (
-                                        <View className="flex-row items-start" style={{ gap: 14 }}>
-                                            <View style={{ backgroundColor: '#f1f5f9', borderRadius: 10, padding: 8, marginTop: 2 }}>
-                                                <LucideWeight size={18} color="#64748b" />
-                                            </View>
-                                            <View>
-                                                <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' }}>Load Estimate</Text>
-                                                <Text style={{ color: '#1e293b', fontSize: 16, fontWeight: '700', marginTop: 2 }}>
-                                                    {verifiedPermit.estimatedWeight} kg
-                                                </Text>
-                                            </View>
-                                        </View>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* ═══════════════════════════════════════ */}
-                            {/* SECURITY & OPS */}
-                            {/* ═══════════════════════════════════════ */}
-                            {(verifiedPermit.plant || verifiedPermit.validFrom || verifiedPermit.validUntil) && (
-                                <View className="bg-white rounded-2xl mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
-                                    {/* Section Header */}
-                                    <View className="px-5 pt-5 pb-3">
-                                        <Text style={{ color: '#1e293b', fontSize: 12, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' }}>
-                                            Security & Ops
-                                        </Text>
-                                    </View>
-
-                                    <View style={{ height: 1, backgroundColor: '#f1f5f9', marginHorizontal: 20 }} />
-
-                                    <View className="px-5 py-4" style={{ gap: 16 }}>
-                                        {/* Designated Plant */}
-                                        {verifiedPermit.plant && (
-                                            <View>
-                                                <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' }}>Designated Plant</Text>
-                                                <Text style={{ color: '#1e293b', fontSize: 18, fontWeight: '700', marginTop: 4 }}>
-                                                    {verifiedPermit.plant.name}
-                                                </Text>
-                                                <Text style={{ color: '#94a3b8', fontSize: 12, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace', marginTop: 2 }}>
-                                                    {verifiedPermit.plant.code}
-                                                </Text>
-                                            </View>
-                                        )}
-
-                                        {/* Activation & Expiry Dates */}
-                                        {(verifiedPermit.validFrom || verifiedPermit.validUntil) && (
-                                            <View style={{ gap: 8 }}>
-                                                {verifiedPermit.validFrom && (
-                                                    <View className="flex-row items-center justify-between" style={{ paddingVertical: 4 }}>
-                                                        <Text style={{ color: '#64748b', fontSize: 13, fontWeight: '500' }}>Activation</Text>
-                                                        <Text style={{ color: '#1e293b', fontSize: 14, fontWeight: '700' }}>
-                                                            {new Date(verifiedPermit.validFrom).toLocaleDateString()}
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                                {verifiedPermit.validUntil && (
-                                                    <View className="flex-row items-center justify-between" style={{ paddingVertical: 4 }}>
-                                                        <Text style={{ color: '#64748b', fontSize: 13, fontWeight: '500' }}>Expiry</Text>
-                                                        <Text style={{
-                                                            color: ['EXPIRED'].includes(verifiedPermit.status) ? '#dc2626' : '#1e293b',
-                                                            fontSize: 14,
-                                                            fontWeight: '700'
-                                                        }}>
-                                                            {new Date(verifiedPermit.validUntil).toLocaleDateString()}
-                                                        </Text>
-                                                    </View>
-                                                )}
-                                            </View>
-                                        )}
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* ═══════════════════════════════════════ */}
-                            {/* SOURCE ENTITY */}
-                            {/* ═══════════════════════════════════════ */}
-                            {(verifiedPermit.user || verifiedPermit.company || verifiedPermit.project) && (
-                                <View className="bg-white rounded-2xl mb-4" style={{ shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 }}>
-                                    {/* Section Header */}
-                                    <View className="px-5 pt-5 pb-3">
-                                        <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '600', letterSpacing: 0.8, textTransform: 'uppercase' }}>
-                                            Source Entity
-                                        </Text>
-                                    </View>
-
-                                    <View className="px-5 pb-5" style={{ gap: 8 }}>
-                                        {/* Authorized Carrier / User */}
-                                        {verifiedPermit.user && (
-                                            <View>
-                                                <Text style={{ color: '#1e293b', fontSize: 20, fontWeight: '700' }}>
-                                                    {verifiedPermit.user.name}
-                                                </Text>
-                                            </View>
-                                        )}
-
-                                        {/* Company (from project or standalone) */}
-                                        {(verifiedPermit.project?.company || verifiedPermit.company) && (
-                                            <View className="flex-row items-center mt-1" style={{ gap: 10 }}>
-                                                <View style={{ backgroundColor: '#f1f5f9', borderRadius: 20, padding: 8 }}>
-                                                    <LucideBuilding2 size={18} color="#64748b" />
-                                                </View>
-                                                <View>
-                                                    <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: '600', letterSpacing: 0.5, textTransform: 'uppercase' }}>Company</Text>
-                                                    <Text style={{ color: '#1e293b', fontSize: 14, fontWeight: '600', marginTop: 1 }}>
-                                                        {verifiedPermit.project?.company?.name || verifiedPermit.company?.name}
-                                                    </Text>
-                                                </View>
-                                            </View>
-                                        )}
-                                    </View>
-                                </View>
-                            )}
-
-                            {/* ═══════════════════════════════════════ */}
-                            {/* AUDIT TIMESTAMP FOOTER */}
-                            {/* ═══════════════════════════════════════ */}
-                            <View style={{
-                                backgroundColor: '#1e293b',
-                                borderRadius: 50,
-                                paddingVertical: 14,
-                                paddingHorizontal: 24,
-                                flexDirection: 'row',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginBottom: 8,
-                                gap: 8,
-                            }}>
-                                <LucideClock size={14} color="white" />
-                                <Text style={{ color: 'white', fontSize: 12, fontWeight: '700', letterSpacing: 1.2 }}>
-                                    AUDIT TIMESTAMP: {auditTime}
+                    <View style={{ gap: 12 }}>
+                        {verifiedPermit.plant && (
+                            <View>
+                                <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '500' }}>
+                                    Designated Plant
+                                </Text>
+                                <Text style={{ 
+                                    color: '#1e293b', 
+                                    fontSize: 16, 
+                                    fontWeight: '700',
+                                    marginTop: 2,
+                                }}>
+                                    {verifiedPermit.plant.name}
+                                </Text>
+                                <Text style={{ 
+                                    color: '#94a3b8', 
+                                    fontSize: 12,
+                                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                                }}>
+                                    {verifiedPermit.plant.code}
                                 </Text>
                             </View>
+                        )}
 
-                            {/* Scan Again Button */}
-                            <TouchableOpacity
-                                style={{
-                                    backgroundColor: '#1e293b',
-                                    paddingVertical: 16,
-                                    borderRadius: 14,
-                                    alignItems: 'center',
-                                    marginTop: 8,
-                                    marginBottom: 8,
-                                    flexDirection: 'row',
-                                    justifyContent: 'center',
-                                    gap: 8,
-                                }}
-                                onPress={resetScanner}
-                            >
-                                <LucideScan size={18} color="white" />
-                                <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Verify Another Permit</Text>
-                            </TouchableOpacity>
+                        {(verifiedPermit.validFrom || verifiedPermit.validUntil) && (
+                            <View style={{ gap: 6, marginTop: 4 }}>
+                                {verifiedPermit.validFrom && (
+                                    <DateRow 
+                                        label="Activation" 
+                                        date={verifiedPermit.validFrom} 
+                                    />
+                                )}
+                                {verifiedPermit.validUntil && (
+                                    <DateRow 
+                                        label="Expiry" 
+                                        date={verifiedPermit.validUntil}
+                                        isExpired={['EXPIRED', 'REVOKED', 'SUSPENDED'].includes(verifiedPermit.status)}
+                                    />
+                                )}
+                            </View>
+                        )}
+                    </View>
+                </View>
+            )}
+
+            {/* ─── SOURCE ENTITY ─── */}
+            {(verifiedPermit.user || verifiedPermit.company || verifiedPermit.project) && (
+                <View style={{
+                    backgroundColor: 'white',
+                    borderRadius: 16,
+                    padding: 16,
+                    marginBottom: 16,
+                    borderWidth: 1,
+                    borderColor: '#f1f5f9',
+                }}>
+                    <Text style={{
+                        color: '#94a3b8',
+                        fontSize: 11,
+                        fontWeight: '600',
+                        letterSpacing: 0.8,
+                        textTransform: 'uppercase',
+                        marginBottom: 12,
+                    }}>
+                        Source Entity
+                    </Text>
+
+                    {verifiedPermit.user && (
+                        <Text style={{ 
+                            color: '#1e293b', 
+                            fontSize: 18, 
+                            fontWeight: '700',
+                            marginBottom: 4,
+                        }}>
+                            {verifiedPermit.user.name}
+                        </Text>
+                    )}
+
+                    {(verifiedPermit.project?.company || verifiedPermit.company) && (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                            <Building2 size={16} color="#94a3b8" />
+                            <Text style={{ color: '#475569', fontSize: 14 }}>
+                                {verifiedPermit.project?.company?.name || verifiedPermit.company?.name}
+                            </Text>
                         </View>
-                    ) : null}
-                </ScrollView>
+                    )}
+                </View>
+            )}
+
+            {/* ─── AUDIT FOOTER ─── */}
+            <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                paddingVertical: 12,
+                marginBottom: 8,
+            }}>
+                <Clock size={12} color="#94a3b8" />
+                <Text style={{ 
+                    color: '#94a3b8', 
+                    fontSize: 10, 
+                    fontWeight: '600',
+                    letterSpacing: 0.5,
+                }}>
+                    AUDIT: {auditTime}
+                </Text>
+            </View>
+
+            {/* ─── SCAN AGAIN BUTTON ─── */}
+            <TouchableOpacity
+                style={{
+                    backgroundColor: '#1e293b',
+                    paddingVertical: 14,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    flexDirection: 'row',
+                    justifyContent: 'center',
+                    gap: 8,
+                    marginBottom: 8,
+                }}
+                onPress={resetScanner}
+                activeOpacity={0.8}
+            >
+                <Scan size={18} color="white" />
+                <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>
+                    Verify Another Permit
+                </Text>
+            </TouchableOpacity>
+        </>
+    ) : null}
+</ScrollView>
             </SafeAreaView>
         );
     }
@@ -687,3 +866,53 @@ export default function VerifyScreen() {
         </SafeAreaView>
     );
 }
+
+
+
+
+
+// Helper component for detail rows
+const DetailRow = ({ icon: Icon, label, value, monospace }: any) => (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: '#f1f5f9',
+            alignItems: 'center',
+            justifyContent: 'center',
+        }}>
+            <Icon size={16} color="#64748b" />
+        </View>
+        <View style={{ flex: 1 }}>
+            <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: '500', letterSpacing: 0.5 }}>
+                {label}
+            </Text>
+            <Text style={{ 
+                color: '#1e293b', 
+                fontSize: 14, 
+                fontWeight: '600',
+                fontFamily: monospace ? (Platform.OS === 'ios' ? 'Menlo' : 'monospace') : undefined,
+            }}>
+                {value}
+            </Text>
+        </View>
+    </View>
+);
+
+// Helper component for date rows
+const DateRow = ({ label, date, isExpired }: any) => (
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ color: '#64748b', fontSize: 12, fontWeight: '500' }}>
+            {label}
+        </Text>
+        <Text style={{ 
+            color: isExpired ? '#dc2626' : '#1e293b',
+            fontSize: 13,
+            fontWeight: '600',
+            fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+        }}>
+            {formatDateTime(date)}
+        </Text>
+    </View>
+);

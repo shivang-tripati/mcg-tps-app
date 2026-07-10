@@ -1,22 +1,26 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { storage, SecureStorage, AUTH_TOKEN_KEY, REFRESH_TOKEN_KEY } from './storage';
 
-// Dev fallback — only used in development builds
-const DEV_API_URL = __DEV__ ? 'http://192.168.1.14:3000/api/v1' : process.env.EXPO_PUBLIC_API_URL;
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const UPLOAD_PATH = process.env.EXPO_PUBLIC_UPLOAD_PATH ?? '/upload';
+
+if (!API_URL) {
+    throw new Error('EXPO_PUBLIC_API_URL is not defined');
+}
 
 export const api = axios.create({
-    baseURL: process.env.EXPO_PUBLIC_API_URL || DEV_API_URL,
+    baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
         'X-Client-Type': 'mobile',
     },
-    timeout: 15000, // 15 seconds timeout
+    timeout: 15000,
 });
 
-export const UPLOAD_FILE_PATH = process.env.EXPO_PUBLIC_UPLOAD_PATH ?? '/upload';
+export const UPLOAD_FILE_PATH = UPLOAD_PATH;
 
 let isRefreshing = false;
-let failedQueue: { resolve: (value?: unknown) => void, reject: (reason?: any) => void }[] = [];
+let failedQueue: { resolve: (value?: unknown) => void; reject: (reason?: any) => void }[] = [];
 
 const processQueue = (error: Error | null, token: string | null = null) => {
     failedQueue.forEach(prom => {
@@ -42,33 +46,42 @@ api.interceptors.response.use(
     async (error: AxiosError) => {
         const originalRequest = error.config;
 
-        // Handle Offline / Network Error
+        // Network errors - pass through
         if (error.message === 'Network Error' || error.code === 'ECONNABORTED') {
-            return Promise.reject(new Error('Network error. Please check your connection and try again.'));
+            return Promise.reject(error);
         }
 
+        // Handle 401 for non-auth endpoints only
         if (error.response?.status === 401 && originalRequest && !(originalRequest as any)._retry) {
+            // Skip refresh for login/register endpoints
+            if (originalRequest.url?.includes('/auth/login') || 
+                originalRequest.url?.includes('/auth/register')) {
+                return Promise.reject(error);
+            }
+
+            const refreshToken = await SecureStorage.getItem(REFRESH_TOKEN_KEY);
+            
+            if (!refreshToken) {
+                await SecureStorage.removeItem(AUTH_TOKEN_KEY);
+                await SecureStorage.removeItem(REFRESH_TOKEN_KEY);
+                return Promise.reject(error);
+            }
+
             if (isRefreshing) {
-                return new Promise(function (resolve, reject) {
+                return new Promise((resolve, reject) => {
                     failedQueue.push({ resolve, reject });
-                }).then(token => {
-                    originalRequest.headers.Authorization = 'Bearer ' + token;
-                    return api(originalRequest);
-                }).catch(err => {
-                    return Promise.reject(err);
-                });
+                })
+                    .then(token => {
+                        originalRequest.headers.Authorization = 'Bearer ' + token;
+                        return api(originalRequest);
+                    })
+                    .catch(err => Promise.reject(err));
             }
 
             (originalRequest as any)._retry = true;
             isRefreshing = true;
 
             try {
-                const refreshToken = await SecureStorage.getItem(REFRESH_TOKEN_KEY);
-
-                if (!refreshToken) {
-                    throw new Error('No refresh token');
-                }
-
                 const response = await axios.post(`${api.defaults.baseURL}/auth/refresh`, {
                     refreshToken,
                 });
@@ -80,8 +93,8 @@ api.interceptors.response.use(
                     await SecureStorage.setItem(REFRESH_TOKEN_KEY, newRefreshToken);
                 }
 
-                api.defaults.headers.common['Authorization'] = 'Bearer ' + accessToken;
                 originalRequest.headers.Authorization = 'Bearer ' + accessToken;
+                api.defaults.headers.common['Authorization'] = 'Bearer ' + accessToken;
 
                 processQueue(null, accessToken);
 

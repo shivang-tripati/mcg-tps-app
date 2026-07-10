@@ -68,7 +68,7 @@ export default function LandingScreen() {
                         
                         {/* Text Content */}
                         <View className="flex-1">
-                            <Text className="text-base text-center font-bold text-foreground mb-0.5">
+                            <Text className="text-base font-bold text-foreground mb-0.5">
                                 Check Permit
                             </Text>
                             <Text className="text-sm text-muted-foreground">

@@ -140,7 +140,7 @@ export default function CompanyDetailScreen() {
                                             {project._count?.permits || 0} permits
                                         </Text>
                                     </View>
-                                    <LucideChevronRight size={16} color="hsl(240 3.8% 46.1%)" />
+                                    {/* <LucideChevronRight size={16} color="hsl(240 3.8% 46.1%)" /> */}
                                 </View>
                             </TouchableOpacity>
                         ))

@@ -1,12 +1,29 @@
-import { View, Text, TouchableOpacity, Alert, TextInput } from 'react-native';
-import { useRouter, Link } from 'expo-router';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    Alert,
+    TextInput,
+} from 'react-native';
+import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useRef, useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as SecureStore from 'expo-secure-store';
-import { LucideEye, LucideEyeOff, LucideFingerprint } from 'lucide-react-native';
+import { Image } from 'expo-image';
+import {
+    ArrowLeft,
+    ChevronRight,
+    CircleUserRound,
+    LucideEye,
+    LucideEyeOff,
+    LucideFingerprint,
+    ShieldCheck,
+} from 'lucide-react-native';
+
+import LoginPermitIllustration from '../../../assets/illustrations/WasteTruckIllustration.png';
 import { useAuth } from '../../lib/auth-store';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/button';
@@ -19,23 +36,26 @@ type LoginFormData = z.infer<typeof loginSchema>;
 const BIOMETRIC_EMAIL_KEY = 'biometric_email';
 const BIOMETRIC_PASSWORD_KEY = 'biometric_password';
 
+const PRIMARY_COLOR = '#8F1D3F';
+const MUTED_ICON_COLOR = '#737373';
+
 export default function LoginScreen() {
     const router = useRouter();
     const { login } = useAuth();
+    const [error, setError] = useState<string | null>(null);
+
     const passwordRef = useRef<TextInput>(null);
+
     const [showPassword, setShowPassword] = useState(false);
     const [isBiometricSupported, setIsBiometricSupported] = useState(false);
     const [hasSavedCredentials, setHasSavedCredentials] = useState(false);
 
-    const handleBack = () => {
-        if (router.canGoBack()) {
-            router.back();
-        } else {
-            router.replace('/');
-        }
-    };
-
-    const { control, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm<LoginFormData>({
+    const {
+        control,
+        handleSubmit,
+        setValue,
+        formState: { errors, isSubmitting },
+    } = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
         defaultValues: {
             email: '',
@@ -43,39 +63,80 @@ export default function LoginScreen() {
         },
     });
 
-    useEffect(() => {
-        (async () => {
-            const compatible = await LocalAuthentication.hasHardwareAsync();
-            const enrolled = await LocalAuthentication.isEnrolledAsync();
-            setIsBiometricSupported(compatible && enrolled);
+    const handleBack = () => {
+        if (router.canGoBack()) {
+            router.back();
+            return;
+        }
+        router.replace('/');
+    };
 
-            const savedEmail = await SecureStore.getItemAsync(BIOMETRIC_EMAIL_KEY);
-            const savedPassword = await SecureStore.getItemAsync(BIOMETRIC_PASSWORD_KEY);
-            setHasSavedCredentials(!!savedEmail && !!savedPassword);
-        })();
+    useEffect(() => {
+        const checkBiometricAvailability = async () => {
+            try {
+                const compatible = await LocalAuthentication.hasHardwareAsync();
+                const enrolled = await LocalAuthentication.isEnrolledAsync();
+                setIsBiometricSupported(compatible && enrolled);
+
+                const savedEmail = await SecureStore.getItemAsync(BIOMETRIC_EMAIL_KEY);
+                const savedPassword = await SecureStore.getItemAsync(BIOMETRIC_PASSWORD_KEY);
+                setHasSavedCredentials(Boolean(savedEmail && savedPassword));
+            } catch (error) {
+                console.error('Failed to check biometric availability:', error);
+                setIsBiometricSupported(false);
+                setHasSavedCredentials(false);
+            }
+        };
+
+        checkBiometricAvailability();
     }, []);
 
     const onSubmit = async (data: LoginFormData) => {
+        setError(null);
         try {
             const response = await api.post('/auth/login', data);
 
+            // Check if response is successful
             if (response.data.success) {
                 const { accessToken, refreshToken, user } = response.data.data;
-                
-                // Save credentials for biometrics if successful
+
                 await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, data.email);
                 await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, data.password);
                 setHasSavedCredentials(true);
 
                 await login(accessToken, refreshToken, user);
-            } else {
-                Alert.alert('Login Failed', response.data.error?.message || 'Unknown error');
+                return;
             }
-        } catch (error: any) {
-            console.error(error);
-            console.log('Error response:', error.response);
-            const message = error.response?.data?.error?.message || 'Network error or server unavailable';
-            Alert.alert('Error', message);
+
+            // If success is false, get error from response
+            const errorMessage = response.data.error?.message || 'Login failed';
+            setError(errorMessage);
+            Alert.alert('Login Failed', errorMessage);
+            
+        } catch (err: any) {         
+            // Extract error message from the response
+            let message = 'Login failed. Please try again.';
+            
+            // Check if error has response with data
+            if (err.response?.data) {
+                const errorData = err.response.data;
+                // Our API returns { success: false, error: { message: '...' } }
+                if (errorData.error?.message) {
+                    message = errorData.error.message;
+                } else if (errorData.message) {
+                    message = errorData.message;
+                }
+            } else if (err.message) {
+                // Handle network errors or other errors
+                if (err.message === 'Network Error' || err.code === 'ECONNABORTED') {
+                    message = 'Network error. Please check your connection.';
+                } else {
+                    message = err.message;
+                }
+            }
+            
+            setError(message);
+            Alert.alert('Login Failed', message);
         }
     };
 
@@ -86,61 +147,89 @@ export default function LoginScreen() {
                 fallbackLabel: 'Enter Password',
             });
 
-            if (result.success) {
-                const email = await SecureStore.getItemAsync(BIOMETRIC_EMAIL_KEY);
-                const password = await SecureStore.getItemAsync(BIOMETRIC_PASSWORD_KEY);
+            if (!result.success) return;
 
-                if (email && password) {
-                    setValue('email', email);
-                    setValue('password', password);
-                    await onSubmit({ email, password });
-                } else {
-                    Alert.alert('Error', 'No credentials saved for biometrics.');
-                }
+            const email = await SecureStore.getItemAsync(BIOMETRIC_EMAIL_KEY);
+            const password = await SecureStore.getItemAsync(BIOMETRIC_PASSWORD_KEY);
+
+            if (!email || !password) {
+                Alert.alert('Error', 'No credentials saved for biometrics.');
+                return;
             }
+
+            setValue('email', email);
+            setValue('password', password);
+
+            await onSubmit({ email, password });
         } catch (error) {
-            console.error(error);
+            console.error('Biometric auth error:', error);
             Alert.alert('Error', 'Biometric authentication failed.');
         }
     };
 
     return (
         <KeyboardAwareScreen className="flex-1 bg-background" scrollable>
-            <View className="flex-1 px-6 py-6">
-                <View className="mb-6">
+            <View className="flex-1 px-5 pb-8">
+                {/* Back button */}
+                <View className="pt-3">
                     <TouchableOpacity
                         onPress={handleBack}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        accessible={true}
+                        activeOpacity={0.7}
+                        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                        accessible
                         accessibilityRole="button"
-                        accessibilityLabel="Go back to the landing screen"
-                        className="self-start"
+                        accessibilityLabel="Go back"
+                        className="h-10 w-10 items-center justify-center rounded-full border border-border bg-card"
                     >
-                        <Text className="text-sm font-semibold text-primary">← Back</Text>
+                        <ArrowLeft size={20} color={PRIMARY_COLOR} strokeWidth={2.25} />
                     </TouchableOpacity>
-
-                    <View className="mt-6">
-                        <Text className="text-3xl font-bold text-foreground">Sign In</Text>
-                        <Text className="text-base text-muted-foreground mt-2">
-                            Access your permits and account details.
-                        </Text>
-                    </View>
                 </View>
 
-                <View className="flex-1">
-                    <View className="space-y-2">
+                {/* Illustration */}
+                <View className="mt-1 h-64 w-full items-center justify-center">
+                    <Image
+                        source={LoginPermitIllustration}
+                        style={{ width: '100%', height: '100%' }}
+                        contentFit="contain"
+                        transition={200}
+                    />
+                </View>
+
+                {/* Heading */}
+                <View className="-mt-1 items-center px-3">
+                    <Text className="text-center text-3xl font-bold tracking-tight text-primary">
+                        Welcome Back
+                    </Text>
+                    <Text className="mt-2 max-w-sm text-center text-base leading-6 text-muted-foreground">
+                        Sign in to manage construction and demolition waste permits securely.
+                    </Text>
+                </View>
+
+                {/* Login form card */}
+                <View className="mt-7 rounded-3xl border border-border bg-card p-5 shadow-sm">
+                    {/* Show error if any */}
+                    {error && (
+                        <View className="mb-4 p-3 bg-red-50 dark:bg-red-950/30 rounded-lg border border-red-200 dark:border-red-800">
+                            <Text className="text-red-600 dark:text-red-400 text-sm text-center">
+                                {error}
+                            </Text>
+                        </View>
+                    )}
+
+                    <View>
                         <Controller
                             control={control}
                             name="email"
                             render={({ field: { onChange, onBlur, value } }) => (
                                 <Input
                                     label="Email"
-                                    placeholder="Enter your email"
+                                    placeholder="you@example.com"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value}
                                     error={errors.email?.message}
                                     autoCapitalize="none"
+                                    autoCorrect={false}
                                     keyboardType="email-address"
                                     returnKeyType="next"
                                     onSubmitEditing={() => passwordRef.current?.focus()}
@@ -148,7 +237,9 @@ export default function LoginScreen() {
                                 />
                             )}
                         />
+                    </View>
 
+                    <View className="mt-3">
                         <Controller
                             control={control}
                             name="password"
@@ -156,7 +247,7 @@ export default function LoginScreen() {
                                 <Input
                                     ref={passwordRef}
                                     label="Password"
-                                    placeholder="Enter your password"
+                                    placeholder="••••••••"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value}
@@ -168,14 +259,11 @@ export default function LoginScreen() {
                                         <TouchableOpacity
                                             onPress={() => setShowPassword(!showPassword)}
                                             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                                            accessible={true}
-                                            accessibilityRole="button"
-                                            accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
                                         >
                                             {showPassword ? (
-                                                <LucideEyeOff size={20} color="hsl(220 9% 46%)" />
+                                                <LucideEyeOff size={20} color={MUTED_ICON_COLOR} />
                                             ) : (
-                                                <LucideEye size={20} color="hsl(220 9% 46%)" />
+                                                <LucideEye size={20} color={MUTED_ICON_COLOR} />
                                             )}
                                         </TouchableOpacity>
                                     }
@@ -184,76 +272,76 @@ export default function LoginScreen() {
                         />
                     </View>
 
-                    <View className="mt-2 items-end">
-                        <TouchableOpacity
-                            accessible={true}
-                            accessibilityRole="button"
-                            accessibilityState={{ disabled: true }}
-                            disabled
-                            className="py-2"
-                        >
-                            {/* <Text className="text-sm font-semibold text-muted-foreground">
-                                Forgot password? <Text className="text-primary">Coming soon</Text>
-                            </Text> */}
-                        </TouchableOpacity>
-                    </View>
-
                     <Button
                         label={isSubmitting ? 'Signing in...' : 'Sign In'}
                         onPress={handleSubmit(onSubmit)}
                         loading={isSubmitting}
-                        className="mt-6"
+                        className="mt-6 h-14 rounded-xl"
                     />
 
+                    {/* Biometric sign-in */}
                     {isBiometricSupported && hasSavedCredentials && (
-                        <View className="mt-6">
-                            <View className="flex-row items-center my-3">
-                                <View className="flex-1 h-px bg-border" />
-                                <Text className="mx-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                                    or
-                                </Text>
-                                <View className="flex-1 h-px bg-border" />
-                            </View>
-                            <TouchableOpacity
-                                onPress={handleBiometricAuth}
-                                className="flex-row items-center justify-center py-3 bg-secondary rounded-md border border-border"
-                                activeOpacity={0.8}
-                                accessible={true}
-                                accessibilityRole="button"
-                                accessibilityLabel="Sign in with biometrics"
-                            >
-                                <LucideFingerprint size={24} color="hsl(325 45% 32%)" />
-                                <Text className="text-primary font-semibold ml-2">Sign in with Biometrics</Text>
-                            </TouchableOpacity>
-                        </View>
-                    )}
-
-                    <View className="mt-8 rounded-xl border border-border bg-secondary/60 p-4">
-                        <Text className="text-sm font-semibold text-foreground">New here?</Text>
-                        <Text className="text-sm text-muted-foreground mt-1">
-                            Create an account to manage permits and stay updated.
-                        </Text>
-                        <Button
-                            variant="secondary"
-                            label="Create Account"
-                            onPress={() => router.push('/(auth)/register')}
-                            className="mt-4 h-12"
-                            accessibilityHint="Opens account creation"
-                        />
-                    </View>
-                </View>
-
-                <View className="mt-8 items-center pb-2">
-                    <Link href="/verify" asChild>
-                        <TouchableOpacity className="py-2" accessible={true} accessibilityRole="link">
-                            <Text className="text-primary text-sm font-semibold text-center">
-                                Need to verify a permit?
-                            </Text>
-                            <Text className="text-muted-foreground text-sm text-center mt-1">
-                                Verify without signing in.
+                        <TouchableOpacity
+                            onPress={handleBiometricAuth}
+                            disabled={isSubmitting}
+                            activeOpacity={0.8}
+                            className="mt-3 h-13 flex-row items-center justify-center rounded-xl border border-primary/20 bg-primary/5 px-4 py-3.5"
+                        >
+                            <LucideFingerprint size={23} color={PRIMARY_COLOR} strokeWidth={2} />
+                            <Text className="ml-2 text-base font-semibold text-primary">
+                                Sign in with Biometrics
                             </Text>
                         </TouchableOpacity>
-                    </Link>
+                    )}
+                </View>
+
+                {/* Divider */}
+                <View className="my-6 flex-row items-center">
+                    <View className="h-px flex-1 bg-border" />
+                    <Text className="mx-4 text-sm font-medium text-muted-foreground">or</Text>
+                    <View className="h-px flex-1 bg-border" />
+                </View>
+
+                {/* Verify without account */}
+                <TouchableOpacity
+                    onPress={() => router.push('/verify')}
+                    activeOpacity={0.8}
+                    className="min-h-16 flex-row items-center rounded-2xl border border-primary/20 bg-card px-4 py-3.5"
+                >
+                    <View className="h-11 w-11 items-center justify-center rounded-full bg-primary/10">
+                        <ShieldCheck size={23} color={PRIMARY_COLOR} strokeWidth={2} />
+                    </View>
+                    <View className="ml-3 flex-1">
+                        <Text className="text-base font-bold text-foreground">Check Permit</Text>
+                        <Text className="mt-0.5 text-sm text-muted-foreground">Continue without signing in</Text>
+                    </View>
+                    <ChevronRight size={22} color={PRIMARY_COLOR} strokeWidth={2} />
+                </TouchableOpacity>
+
+                {/* Register */}
+                <TouchableOpacity
+                    onPress={() => router.push('/(auth)/register')}
+                    activeOpacity={0.8}
+                    className="mt-4 min-h-16 flex-row items-center rounded-2xl border border-border bg-secondary/50 px-4 py-3.5"
+                >
+                    <View className="h-11 w-11 items-center justify-center rounded-full bg-background">
+                        <CircleUserRound size={22} color={PRIMARY_COLOR} strokeWidth={2} />
+                    </View>
+                    <View className="ml-3 flex-1">
+                        <Text className="text-base font-bold text-foreground">Create Account</Text>
+                        <Text className="mt-0.5 text-sm text-muted-foreground">Register to manage your permits</Text>
+                    </View>
+                    <ChevronRight size={22} color={PRIMARY_COLOR} strokeWidth={2} />
+                </TouchableOpacity>
+
+                {/* Footer */}
+                <View className="mt-8 items-center pb-2">
+                    <View className="flex-row items-center">
+                        <ShieldCheck size={16} color={MUTED_ICON_COLOR} strokeWidth={1.8} />
+                        <Text className="ml-2 text-sm font-medium text-muted-foreground">
+                            Secure MCG Permit Verification
+                        </Text>
+                    </View>
                 </View>
             </View>
         </KeyboardAwareScreen>

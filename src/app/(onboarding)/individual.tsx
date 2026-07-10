@@ -13,20 +13,26 @@ import { api } from '../../lib/api';
 import { useOnboarding } from '../../lib/onboarding-store';
 import { useAuth } from '../../lib/auth-store';
 
+// ✅ Proper Aadhaar Validation
 const aadhaarSchema = z.object({
     documentNumber: z
         .string()
-        .min(12, 'Aadhaar number must be 12 digits')
-        .max(12, 'Aadhaar number must be 12 digits')
-        .regex(/^\d{12}$/, 'Aadhaar must be exactly 12 digits'),
+        .min(1, 'Aadhaar number is required')
+        .regex(/^\d{12}$/, 'Aadhaar must be exactly 12 digits')
+        .refine((val) => {
+            return val.length === 12 && /^\d+$/.test(val);
+        }, 'Invalid Aadhaar number format'),
 });
 
+// ✅ Proper PAN Validation
 const panSchema = z.object({
     documentNumber: z
         .string()
-        .min(10, 'PAN must be 10 characters')
-        .max(10, 'PAN must be 10 characters')
-        .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Invalid PAN format (e.g. ABCDE1234F)'),
+        .min(1, 'PAN number is required')
+        .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, 'Invalid PAN format. Format: ABCDE1234F')
+        .refine((val) => {
+            return val.length === 10;
+        }, 'PAN must be exactly 10 characters'),
 });
 
 type AadhaarFormData = z.infer<typeof aadhaarSchema>;
@@ -45,13 +51,24 @@ function DocumentCard({ title, icon, docType, existingDoc, isUploaded, onSaved }
     const schema = docType === 'AADHAAR' ? aadhaarSchema : panSchema;
     const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
     const [saving, setSaving] = useState(false);
+    const [isValidating, setIsValidating] = useState(false);
 
-    const { control, handleSubmit, formState: { errors }, setValue } = useForm<{ documentNumber: string }>({
+    const { 
+        control, 
+        handleSubmit, 
+        formState: { errors, isValid }, 
+        setValue,
+        watch,
+        trigger,
+    } = useForm<{ documentNumber: string }>({
         resolver: zodResolver(schema),
+        mode: 'onChange',
         defaultValues: {
             documentNumber: existingDoc?.documentNumber || '',
         },
     });
+
+    const documentNumber = watch('documentNumber');
 
     useEffect(() => {
         if (existingDoc?.documentNumber) {
@@ -59,9 +76,53 @@ function DocumentCard({ title, icon, docType, existingDoc, isUploaded, onSaved }
         }
     }, [existingDoc]);
 
+    useEffect(() => {
+        if (documentNumber && documentNumber.length > 0) {
+            trigger('documentNumber');
+        }
+    }, [documentNumber, trigger]);
+
+    const validateDocument = async (number: string): Promise<boolean> => {
+        setIsValidating(true);
+        try {
+            if (docType === 'AADHAAR') {
+                if (number.startsWith('0') || number.startsWith('1')) {
+                    Alert.alert('Invalid Aadhaar', 'Aadhaar number should not start with 0 or 1');
+                    return false;
+                }
+                
+                const sum = number.split('').reduce((acc, digit) => acc + parseInt(digit), 0);
+                if (sum < 10) {
+                    Alert.alert('Invalid Aadhaar', 'Please enter a valid Aadhaar number');
+                    return false;
+                }
+            }
+
+            if (docType === 'PAN') {
+                const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+                if (!panRegex.test(number)) {
+                    Alert.alert('Invalid PAN', 'Please enter a valid PAN number (e.g., ABCDE1234F)');
+                    return false;
+                }
+            }
+
+            return true;
+        } catch (error) {
+            console.error('Validation error:', error);
+            return false;
+        } finally {
+            setIsValidating(false);
+        }
+    };
+
     const onSubmit = async (data: { documentNumber: string }) => {
         if (!uploadedFile?.serverPath && !existingDoc) {
             Alert.alert('Missing File', 'Please upload a document file first.');
+            return;
+        }
+
+        const isValid = await validateDocument(data.documentNumber);
+        if (!isValid) {
             return;
         }
 
@@ -79,17 +140,29 @@ function DocumentCard({ title, icon, docType, existingDoc, isUploaded, onSaved }
 
             if (response.data.success) {
                 onSaved(response.data.data);
-                Alert.alert('Saved', `${title} details saved successfully.`);
+                Alert.alert('Success', `${title} details verified and saved successfully.`);
             } else {
                 Alert.alert('Error', response.data.error?.message || 'Failed to save document.');
             }
         } catch (err: any) {
             console.error(`Save ${docType} error:`, err);
-            Alert.alert('Error', err.response?.data?.error?.message || 'Failed to save document.');
+            const errorMessage = err.response?.data?.error?.message || 
+                               err.response?.data?.message || 
+                               'Failed to save document.';
+            Alert.alert('Error', errorMessage);
         } finally {
             setSaving(false);
         }
     };
+
+    const getValidationStatus = () => {
+        if (!documentNumber) return null;
+        if (errors.documentNumber) return 'error';
+        if (documentNumber.length > 0 && isValid) return 'valid';
+        return null;
+    };
+
+    const validationStatus = getValidationStatus();
 
     return (
         <View className="bg-card border border-border rounded-xl p-4 mb-4">
@@ -114,31 +187,67 @@ function DocumentCard({ title, icon, docType, existingDoc, isUploaded, onSaved }
                 control={control}
                 name="documentNumber"
                 render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                        label={docType === 'AADHAAR' ? 'Aadhaar Number' : 'PAN Number'}
-                        placeholder={docType === 'AADHAAR' ? 'Enter 12-digit Aadhaar' : 'Enter PAN (e.g. ABCDE1234F)'}
-                        onBlur={onBlur}
-                        onChangeText={(text) => {
-                            if (docType === 'PAN') {
-                                onChange(text.toUpperCase());
-                            } else {
-                                onChange(text.replace(/\D/g, ''));
-                            }
-                        }}
-                        value={value}
-                        error={errors.documentNumber?.message}
-                        keyboardType={docType === 'AADHAAR' ? 'number-pad' : 'default'}
-                        maxLength={docType === 'AADHAAR' ? 12 : 10}
-                        autoCapitalize={docType === 'PAN' ? 'characters' : 'none'}
-                        editable={!isUploaded}
-                    />
+                    <View>
+                        <Input
+                            label={docType === 'AADHAAR' ? 'Aadhaar Number' : 'PAN Number'}
+                            placeholder={docType === 'AADHAAR' 
+                                ? 'Enter 12-digit Aadhaar' 
+                                : 'Enter PAN (e.g. ABCDE1234F)'}
+                            onBlur={onBlur}
+                            onChangeText={(text) => {
+                                if (docType === 'PAN') {
+                                    onChange(text.toUpperCase());
+                                } else {
+                                    onChange(text.replace(/\D/g, ''));
+                                }
+                            }}
+                            value={value}
+                            error={errors.documentNumber?.message}
+                            keyboardType={docType === 'AADHAAR' ? 'number-pad' : 'default'}
+                            maxLength={docType === 'AADHAAR' ? 12 : 10}
+                            autoCapitalize={docType === 'PAN' ? 'characters' : 'none'}
+                            editable={!isUploaded}
+                        />
+                        {/* ✅ Show validation status below the input */}
+                        {!isUploaded && value && value.length > 0 && (
+                            <View className="flex-row items-center mt-1">
+                                {isValidating ? (
+                                    <ActivityIndicator size="small" color="hsl(325 45% 32%)" />
+                                ) : errors.documentNumber ? (
+                                    <Text className="text-error text-xs">✕ Invalid format</Text>
+                                ) : isValid ? (
+                                    <Text className="text-success text-xs">✓ Valid format</Text>
+                                ) : null}
+                            </View>
+                        )}
+                    </View>
                 )}
             />
+
+            {/* Helper text for PAN format */}
+            {docType === 'PAN' && !isUploaded && (
+                <Text className="text-xs text-muted-foreground mt-1">
+                    Format: 5 letters + 4 digits + 1 letter (e.g., ABCDE1234F)
+                </Text>
+            )}
+
+            {/* Helper text for Aadhaar format */}
+            {docType === 'AADHAAR' && !isUploaded && (
+                <Text className="text-xs text-muted-foreground mt-1">
+                    Enter 12-digit Aadhaar number (e.g., 123456789012)
+                </Text>
+            )}
 
             {/* File Upload */}
             {!isUploaded && (
                 <FileUpload
                     label="Upload Document"
+                    accept={[
+                        'image/*',
+                        'application/pdf',
+                        'application/msword',
+                        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    ]}
                     onUpload={(file) => setUploadedFile(file)}
                     onRemove={() => setUploadedFile(null)}
                     disabled={isUploaded}
@@ -148,12 +257,29 @@ function DocumentCard({ title, icon, docType, existingDoc, isUploaded, onSaved }
             {/* Save Button */}
             {!isUploaded && (
                 <Button
-                    label={saving ? 'Saving…' : 'Save'}
+                    label={saving ? 'Validating & Saving…' : 'Save & Verify'}
                     onPress={handleSubmit(onSubmit)}
                     loading={saving}
+                    disabled={!isValid || !uploadedFile?.serverPath}
                     variant="outline"
                     className="mt-1"
                 />
+            )}
+
+            {/* Show validation requirement */}
+            {!isUploaded && (
+                <View className="mt-2">
+                    {!uploadedFile?.serverPath && (
+                        <Text className="text-xs text-muted-foreground">
+                            ⚠️ Please upload a document before saving
+                        </Text>
+                    )}
+                    {uploadedFile?.serverPath && !isValid && documentNumber && (
+                        <Text className="text-xs text-error">
+                            ⚠️ Please enter a valid {docType === 'AADHAAR' ? 'Aadhaar' : 'PAN'} number
+                        </Text>
+                    )}
+                </View>
             )}
         </View>
     );
@@ -188,7 +314,7 @@ export default function IndividualOnboardingScreen() {
                     { text: 'Exit', onPress: () => BackHandler.exitApp() }
                 ]
             );
-            return true; // handled
+            return true;
         };
 
         const backHandler = BackHandler.addEventListener(
