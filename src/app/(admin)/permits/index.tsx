@@ -74,7 +74,7 @@ export default function AdminPermitsScreen() {
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
             {/* Header */}
             <View className="px-4 py-3 border-b border-border bg-card">
-                <Text className="text-2xl font-bold text-foreground mb-4">Manage Permits</Text>
+                {/* <Text className="text-2xl font-bold text-foreground mb-4">Manage Permits</Text> */}
 
                 <View className="flex-row gap-2">
                     <View className="flex-1 flex-row items-center bg-background border border-input rounded-lg px-3 h-12">

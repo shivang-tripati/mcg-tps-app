@@ -1,18 +1,24 @@
-import { Tabs, useRouter, Stack } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import {
-    LucideHome,
-    LucideBuilding2,
-    LucideFactory,
-    LucideUsers
-} from 'lucide-react-native';
+import { View, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { LucideFileText, LucideHome, LucideScale, LucideLogOut } from 'lucide-react-native';
 import { useAuth } from '../../lib/auth-store';
 import { UserRole } from '../../types/database';
 
 export default function AdminLayout() {
-    const { user, isLoading } = useAuth();
+    const { user, isLoading, logout } = useAuth();
     const router = useRouter();
+
+    const handleLogout = () => {
+        Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Logout', style: 'destructive', onPress: () => logout() },
+            ]
+        );
+    };
 
     // Role-based protection: redirect non-admins
     useEffect(() => {
@@ -48,32 +54,37 @@ export default function AdminLayout() {
                     title: 'Dashboard',
                     tabBarIcon: ({ color }) => <LucideHome size={22} color={color} />,
                     headerTitle: 'Admin Dashboard',
+                    headerRight: () => (
+                        <TouchableOpacity
+                            onPress={handleLogout}
+                            style={{ marginRight: 16, padding: 6 }}
+                            activeOpacity={0.7}
+                        >
+                            <LucideLogOut size={20} color="white" />
+                        </TouchableOpacity>
+                    ),
                 }}
             />
+
             <Tabs.Screen
-                name="companies"
+                name="permits"
                 options={{
-                    title: 'Companies',
-                    tabBarIcon: ({ color }) => <LucideBuilding2 size={22} color={color} />,
-                    headerTitle: 'Companies',
+                    title: 'Permits',
+                    tabBarIcon: ({ color }) => <LucideFileText size={22} color={color} />,
+                    headerTitle: 'Manage Permits',
+                    headerShown: false
                 }}
             />
-            <Tabs.Screen
-                name="plants"
+
+             <Tabs.Screen
+                name="weighments"
                 options={{
-                    title: 'Plants',
-                    tabBarIcon: ({ color }) => <LucideFactory size={22} color={color} />,
-                    headerTitle: 'Plants',
+                    title: 'Weighments',
+                    tabBarIcon: ({ color }) => <LucideScale size={22} color={color} />,
+                    headerTitle: 'Weighments',
                 }}
             />
-            <Tabs.Screen
-                name="users"
-                options={{
-                    title: 'Users',
-                    tabBarIcon: ({ color }) => <LucideUsers size={22} color={color} />,
-                    headerTitle: 'Users',
-                }}
-            />
+            
         </Tabs>
     );
 }
