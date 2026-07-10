@@ -1,4 +1,4 @@
-import { KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, Keyboard } from 'react-native';
 import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import React from 'react';
 
@@ -39,15 +39,16 @@ export function KeyboardAwareScreen({
     return (
         <SafeAreaView className={className} edges={edges} style={style}>
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 className="flex-1"
-                keyboardVerticalOffset={keyboardVerticalOffset}
+                keyboardVerticalOffset={Platform.OS === 'ios' ? keyboardVerticalOffset : 0}
             >
                 {scrollable ? (
                     <ScrollView
                         contentContainerStyle={{ flexGrow: 1 }}
                         keyboardShouldPersistTaps="handled"
                         showsVerticalScrollIndicator={false}
+                        onScrollBeginDrag={Keyboard.dismiss}
                         {...scrollViewProps}
                     >
                         {children}

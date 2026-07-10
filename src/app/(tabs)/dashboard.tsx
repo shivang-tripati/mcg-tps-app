@@ -23,6 +23,7 @@ import { useAuth } from '../../lib/auth-store';
 import { useDashboardStats } from '../../hooks/use-dashboard';
 import type { DashboardStats } from '../../types/dashboard';
 import { StatusBadge } from '../../components/ui/status-badge';
+import { Skeleton } from '../../components/ui/skeleton';
 
 const PRIMARY = 'hsl(325 45% 32%)';
 const MUTED = 'hsl(220 9% 46%)';
@@ -88,9 +89,31 @@ export default function DashboardScreen() {
 
     if (isLoading) {
         return (
-            <SafeAreaView className="flex-1 bg-background justify-center items-center">
-                <ActivityIndicator size="large" color={PRIMARY} />
-                <Text className="text-muted-foreground text-sm mt-4">Loading dashboard…</Text>
+            <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+                {/* Header Skeleton */}
+                <View className="px-6 pt-2 pb-10 bg-primary rounded-b-[28px] shadow-sm flex-row justify-between">
+                    <View className="flex-1 pr-4">
+                        <Skeleton className="w-24 h-4 bg-white/20 mb-2" />
+                        <Skeleton className="w-40 h-8 bg-white/20 mb-2" />
+                        <Skeleton className="w-20 h-6 bg-white/20 mb-3" />
+                        <Skeleton className="w-48 h-3 bg-white/20" />
+                    </View>
+                    <Skeleton className="w-14 h-14 rounded-2xl bg-white/20" />
+                </View>
+
+                {/* Stats Skeleton */}
+                <View className="px-5 -mt-7 flex-row flex-wrap gap-3">
+                    {[1, 2, 3, 4].map((i) => (
+                        <View key={i} className="bg-card rounded-2xl p-4 border border-border flex-1 min-w-[46%] shadow-sm h-32">
+                            <View className="flex-row items-start justify-between mb-3">
+                                <Skeleton className="w-11 h-11 rounded-xl" />
+                                <Skeleton className="w-10 h-8 rounded-md" />
+                            </View>
+                            <Skeleton className="w-20 h-4 rounded-md mb-2" />
+                            <Skeleton className="w-16 h-3 rounded-md" />
+                        </View>
+                    ))}
+                </View>
             </SafeAreaView>
         );
     }

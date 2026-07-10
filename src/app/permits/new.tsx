@@ -270,7 +270,7 @@ export default function NewPermitScreen() {
                 <TouchableOpacity onPress={() => router.back()} className="mr-3">
                     <LucideArrowLeft size={24} color="white" />
                 </TouchableOpacity>
-                <Text className="text-white text-xl font-bold">Create New Permit</Text>
+                <Text className="text-white text-xl font-bold">Apply for Permit</Text>
             </View>
 
             <StepIndicator steps={STEPS} currentStep={currentStep} />

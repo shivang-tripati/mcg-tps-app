@@ -17,9 +17,10 @@ interface AuthState {
     login: (accessToken: string, refreshToken: string, user: User) => Promise<void>;
     logout: () => Promise<void>;
     hydrate: () => Promise<void>;
+    updateUser: (user: Partial<User>) => void;
 }
 
-export const useAuth = create<AuthState>((set) => ({
+export const useAuth = create<AuthState>((set, get) => ({
     user: null,
     isAuthenticated: false,
     isLoading: true,
@@ -43,20 +44,27 @@ export const useAuth = create<AuthState>((set) => ({
 
             // 3. Execute storage saves
             await Promise.all([
-                storage.set(AUTH_TOKEN_KEY, tokenStr),
+                SecureStorage.setItem(AUTH_TOKEN_KEY, tokenStr),
                 storage.set(USER_KEY, userStr),
                 SecureStorage.setItem(REFRESH_TOKEN_KEY, refreshStr)
             ]);
 
             set({ user, isAuthenticated: true });
-            router.replace('/(tabs)/dashboard');
+
+            // Navigation is now handled by the root layout's onboarding-aware logic
+            // The layout will detect isAuthenticated=true and route accordingly
         } catch (error) {
             console.error("❌ Error during login storage process:", error);
         }
     },
 
     logout: async () => {
-        await storage.delete(AUTH_TOKEN_KEY);
+        try {
+            // Try to call the logout API (ignore errors)
+            await api_logout_safe();
+        } catch { }
+
+        await SecureStorage.removeItem(AUTH_TOKEN_KEY);
         await storage.delete(USER_KEY);
         await SecureStorage.removeItem(REFRESH_TOKEN_KEY);
 
@@ -67,7 +75,7 @@ export const useAuth = create<AuthState>((set) => ({
     hydrate: async () => {
         try {
             // MUST await these because we moved from MMKV to AsyncStorage
-            const token = await storage.getString(AUTH_TOKEN_KEY);
+            const token = await SecureStorage.getItem(AUTH_TOKEN_KEY);
             const userStr = await storage.getString(USER_KEY);
 
             if (token && userStr) {
@@ -81,4 +89,25 @@ export const useAuth = create<AuthState>((set) => ({
             set({ user: null, isAuthenticated: false, isLoading: false });
         }
     },
+
+    updateUser: (partial) => {
+        const current = get().user;
+        if (current) {
+            const updated = { ...current, ...partial };
+            set({ user: updated });
+            // Persist to storage
+            storage.set(USER_KEY, JSON.stringify(updated));
+        }
+    },
 }));
+
+/**
+ * Safe logout API call — fire-and-forget.
+ * We import api lazily to avoid circular dependency issues.
+ */
+async function api_logout_safe() {
+    try {
+        const { api } = require('./api');
+        await api.post('/auth/logout');
+    } catch { }
+}

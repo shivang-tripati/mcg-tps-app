@@ -84,7 +84,8 @@ export function getTimeRemaining(futureDate: Date | string): {
 export const getEvidenceUrl = (path: string) => {
     // Note: Use EXPO_PUBLIC prefix for Expo env variables
     const baseUrl = process.env.EXPO_PUBLIC_FILE_BASE_URL || `http://${IP_ADDRESS}:${PORT}`;
-    return `${baseUrl}/${path}`;
+    console.log("baseUrl ", `${baseUrl}/uploads/${path}`)
+    return `${baseUrl}/uploads/${path}`;  // might change later and resturn from relative static url from server
 };
 
 /**
