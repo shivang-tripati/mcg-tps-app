@@ -200,3 +200,25 @@ export const calculateTimeLeft = (validFrom: string | null | undefined, validUnt
     };
 };
 
+
+
+export function parseDateTimeField(val: string | undefined): Date {
+    if (!val) return new Date();
+    // Handles format: "2024-01-15T14:30"
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val)) {
+        return new Date(`${val}:00`);
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? new Date() : d;
+}
+
+export function mergeDateAndTime(datePart: Date, timeSource: Date): Date {
+    const out = new Date(datePart);
+    out.setHours(timeSource.getHours(), timeSource.getMinutes(), 0, 0);
+    return out;
+}
+
+export function formatLocalDateTime(d: Date): string {
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}

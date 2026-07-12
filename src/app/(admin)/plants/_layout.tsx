@@ -1,26 +1,25 @@
 import { Stack } from 'expo-router';
 
-export default function PermitsLayout() {
+export default function PlantsLayout() {
     return (
         <Stack
             screenOptions={{
                 headerStyle: { backgroundColor: 'hsl(325 45% 32%)' },
                 headerTintColor: 'white',
                 headerBackTitle: 'Back',
-                headerShown: true,
             }}
         >
             <Stack.Screen
                 name="index"
                 options={{
-                    title: 'Manage Permits',
+                    title: 'Plants',
                     headerShown: false,
                 }}
             />
             <Stack.Screen
                 name="[id]"
                 options={{
-                    title: 'Permit Details',
+                    title: 'Plant Details',
                     headerShown: false,
                 }}
             />

@@ -21,9 +21,9 @@ import {
     LucideRefreshCw,
     LucideInbox,
 } from 'lucide-react-native';
-import { usePermits } from '../../hooks/use-permits';
-import { useAuth } from '../../lib/auth-store';
-import { StatusBadge } from '../../components/ui/status-badge';
+import { usePermits } from '../../../hooks/use-permits';
+import { useAuth } from '../../../lib/auth-store';
+import { StatusBadge } from '../../../components/ui/status-badge';
 
 const PRIMARY = 'hsl(325 45% 32%)';
 const MUTED = 'hsl(220 9% 46%)';
@@ -45,13 +45,23 @@ export default function PermitsScreen() {
 
     const permits = (data?.data ?? []) as PermitListItem[];
 
-    const openPermit = (permitId: string) => {
+     const openPermit = (permitId: string) => {
+        console.log('🔍 Opening permit:', {
+            permitId,
+            userRole: user?.role,
+            isAdmin: user?.role === 'ADMIN'
+        });
+
         if (user?.role === 'ADMIN') {
-            router.push(`/(admin)/permits/${permitId}` as const);
+            const route = `/(admin)/permits/${permitId}`;
+            console.log('📱 Navigating to admin route:', route);
+            router.push(route);
         } else {
-            router.push(`/permits/${permitId}` as const);
+            const route = `/permits/${permitId}`;
+            console.log('📱 Navigating to user route:', route);
+            router.push(route);
         }
-    };
+    };;
 
     const renderPermitCard = ({ item }: { item: PermitListItem }) => (
         <TouchableOpacity
@@ -63,7 +73,7 @@ export default function PermitsScreen() {
                 shadowRadius: 4,
                 elevation: 2,
             }}
-            onPress={() => openPermit(item.id)}
+            onPress={() => router.push(`${user?.role === 'ADMIN' ? '/(admin)/permits/' : '/permits/'}${item.id}`)}
             activeOpacity={0.75}
         >
             <View className="flex-row items-start justify-between gap-3">

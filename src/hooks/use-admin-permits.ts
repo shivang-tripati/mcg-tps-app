@@ -8,6 +8,7 @@ import {
     RecordWeighmentPayload,
     QRCodeData
 } from '../types/admin';
+import { showToast } from '../lib/toast';
 
 // Reusing Permit interface from use-permits.ts if possible, but PermitDetail is more comprehensive
 // Defining a simpler ListPermit for the list view if needed, or using PermitDetail
@@ -79,17 +80,34 @@ export function usePermitQRCode(id: string, enabled: boolean) {
 
 // MUTATIONS
 
+
 export function useApprovePermit() {
     const queryClient = useQueryClient();
+
     return useMutation({
         mutationFn: async ({ id, data }: { id: string; data: ApprovePermitPayload }) => {
-            const response = await api.post<ApiResponse<PermitDetail>>(`/permits/${id}/approve`, data);
+            const response = await api.post<ApiResponse<PermitDetail>>(
+                `/permits/${id}/approve`,
+                data
+            );
             return response.data;
         },
         onSuccess: (data, variables) => {
+            // Invalidate all relevant queries
             queryClient.invalidateQueries({ queryKey: ['admin-permit', variables.id] });
             queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
             queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+            queryClient.invalidateQueries({ queryKey: ['permit', variables.id] });
+            queryClient.invalidateQueries({ queryKey: ['permits'] });
+            
+            showToast.success(
+                'Permit Approved',
+                'The permit has been approved successfully'
+            );
+        },
+        onError: (error: any) => {
+            const message = error?.response?.data?.message || 'Failed to approve permit';
+            showToast.error('Approval Failed', message);
         },
     });
 }
@@ -105,6 +123,11 @@ export function useRejectPermit() {
             queryClient.invalidateQueries({ queryKey: ['admin-permit', variables.id] });
             queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
             queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+            showToast.success('Permit Rejected', 'The permit has been rejected successfully.');
+        },
+        onError: (error: any) => {
+            const message = error?.response?.data?.message || 'Failed to reject permit';
+            showToast.error('Rejection Failed', message);   
         },
     });
 }
@@ -124,6 +147,7 @@ export function useStartTransit() {
     });
 }
 
+
 export function useRecordWeighment() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -134,6 +158,11 @@ export function useRecordWeighment() {
         onSuccess: (data, variables) => {
             queryClient.invalidateQueries({ queryKey: ['admin-permit', variables.permitId] });
             queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+        },
+        onError: (error: any) => {
+            const message = error?.response?.data?.message || 'Failed to record weighment';
+            showToast.error('Weighment Failed', message);
         },
     });
 }

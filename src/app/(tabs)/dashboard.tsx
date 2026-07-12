@@ -80,7 +80,6 @@ export default function DashboardScreen() {
     const onRefresh = () => refetch();
 
     // In your component
-    // In your component
     const openPermit = (permitId: string) => {
         console.log('🔍 Opening permit:', {
             permitId,
@@ -97,7 +96,7 @@ export default function DashboardScreen() {
             console.log('📱 Navigating to user route:', route);
             router.push(route);
         }
-    };;
+    };
     if (isLoading) {
         return (
             <SafeAreaView className="flex-1 bg-background" edges={['top']}>

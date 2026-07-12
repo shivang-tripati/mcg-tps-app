@@ -3,9 +3,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { LucideSearch, LucideUser, LucideChevronRight, LucideMail, LucideBuilding2 } from 'lucide-react-native';
-import { useUsers } from '../../hooks/use-admin';
-import { AdminUser } from '../../types/admin';
-import { UserRole } from '../../types/database';
+import { useUsers } from '../../../hooks/use-admin';
+import { AdminUser } from '../../../types/admin';
+import { UserRole } from '../../../types/database';
 
 const getRoleBadgeStyle = (role: UserRole) => {
     switch (role) {
@@ -34,7 +34,7 @@ export default function UsersListScreen() {
         return (
             <TouchableOpacity
                 className="bg-card rounded-xl p-4 border border-border mb-3 shadow-sm"
-                onPress={() => router.push(`/admin/users/${item.id}` as any)}
+                onPress={() => router.push(`/(admin)/users/${item.id}` as any)}
             >
                 <View className="flex-row items-start">
                     <View className="p-3 rounded-xl bg-orange-100 mr-3">

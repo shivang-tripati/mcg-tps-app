@@ -3,8 +3,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { LucideSearch, LucideFactory, LucideChevronRight, LucideMapPin, LucideClock } from 'lucide-react-native';
-import { usePlants } from '../../hooks/use-admin';
-import { Plant } from '../../types/admin';
+import { usePlants } from '../../../hooks/use-admin';
+import { Plant } from '../../../types/admin';
 
 export default function PlantsListScreen() {
     const router = useRouter();
@@ -16,7 +16,7 @@ export default function PlantsListScreen() {
     const renderPlantCard = ({ item }: { item: Plant }) => (
         <TouchableOpacity
             className="bg-card rounded-xl p-4 border border-border mb-3 shadow-sm"
-            onPress={() => router.push(`/admin/plants/${item.id}` as any)}
+            onPress={() => router.push(`/(admin)/plants/${item.id}` as any)}
         >
             <View className="flex-row items-start">
                 <View className="p-3 rounded-xl bg-teal-100 mr-3">

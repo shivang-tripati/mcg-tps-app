@@ -71,14 +71,7 @@ export default function RootLayout() {
     useEffect(() => {
         const prepare = async () => {
             try {
-                // Hydrate auth state from storage
                 await hydrate();
-                
-                // Add any other initialization here
-                // - Prefetch fonts
-                // - Initialize analytics
-                // - Check for updates
-                
             } catch (error) {
                 console.error('App preparation error:', error);
             } finally {
@@ -103,19 +96,30 @@ export default function RootLayout() {
             
             setIsOffline(!isConnected);
             
-            // Show toast when connection status changes
             if (!isConnected) {
-                // showToast.warning('You are offline', 'Some features may not work');
+                // Show offline toast
+                Toast.show({
+                    type: 'error',
+                    text1: 'You are offline',
+                    text2: 'Some features may not work',
+                    position: 'top',
+                    visibilityTime: 3000,
+                });
             } else if (wasOfflineBefore) {
-                // showToast.success('Back online', 'Your connection has been restored');
-                // Refresh data when coming back online
+                // Show back online toast
+                Toast.show({
+                    type: 'success',
+                    text1: 'Back online',
+                    text2: 'Your connection has been restored',
+                    position: 'top',
+                    visibilityTime: 3000,
+                });
                 refreshAppData();
             }
         });
         
         return () => unsubscribe();
     }, []);
-
 
     const refreshAppData = useCallback(async () => {
         try {
@@ -132,23 +136,40 @@ export default function RootLayout() {
     // 3. ONBOARDING STATUS CHECK
     // ==========================================================================
     useEffect(() => {
-        const checkOnboarding = async () => {
-            if (!isLoading && isAuthenticated && user && !checked && !isChecking) {
-                try {
-                    await checkOnboardingStatus(user);
-                } catch (error) {
-                    console.error('Failed to check onboarding status:', error);
-                }
-            }
-        };
+    const checkOnboarding = async () => {
+        if (checked) return;
+        
+        if (isLoading) return;
+        
+        if (!isAuthenticated) return;
+        
+        if (isChecking) return;
+        
+        if (!user) return;
 
-        checkOnboarding();
-
-        // Reset onboarding state when user logs out
-        if (!isAuthenticated && checked) {
-            resetOnboarding();
+        try {
+            await checkOnboardingStatus(user);
+        } catch (error) {
+            console.error('Failed to check onboarding status:', error);
+            useOnboarding.setState({ checked: true, isChecking: false });
         }
-    }, [isAuthenticated, isLoading, user, checked, isChecking, checkOnboardingStatus, resetOnboarding]);
+    };
+
+    checkOnboarding();
+
+    // Reset onboarding state when user logs out
+    if (!isAuthenticated && checked) {
+        resetOnboarding();
+    }
+}, [
+    isAuthenticated, 
+    isLoading, 
+    user, 
+    checked, 
+    isChecking, 
+    checkOnboardingStatus, 
+    resetOnboarding
+]);
 
     // ==========================================================================
     // 4. DEEP LINKING
@@ -158,7 +179,6 @@ export default function RootLayout() {
             const url = event.url;
             const { path, queryParams } = Linking.parse(url);
             
-            // Handle specific deep links
             if (path === 'reset-password' && queryParams?.token) {
                 router.push(`/reset-password?token=${queryParams.token}`);
                 return;
@@ -169,17 +189,19 @@ export default function RootLayout() {
                 return;
             }
             
-            // Handle permit deep links
             if (path === 'permit' && queryParams?.id) {
-                router.push(`/permits/${queryParams.id}`);
+                // Handle deep link to permit based on user role
+                if (user?.role === UserRole.ADMIN) {
+                    router.push(`/(admin)/permits/${queryParams.id}`);
+                } else {
+                    router.push(`/(tabs)/permits/${queryParams.id}`);
+                }
                 return;
             }
         };
 
-        // Subscribe to deep links
         const subscription = Linking.addEventListener('url', handleDeepLink);
 
-        // Check if app was opened from a deep link
         Linking.getInitialURL().then((url) => {
             if (url) {
                 handleDeepLink({ url });
@@ -189,19 +211,14 @@ export default function RootLayout() {
         return () => {
             subscription.remove();
         };
-    }, []);
+    }, [user]);
 
     // ==========================================================================
-    // 5. NAVIGATION GUARD (CRITICAL)
+    // 5. NAVIGATION GUARD
     // ==========================================================================
     useEffect(() => {
-        // Don't run navigation if:
-        // - App is not ready
-        // - Auth is still loading
-        // - Already navigating to prevent loops
         if (!appIsReady || isLoading || isNavigating) return;
 
-        // Get current route segments
         const inAuthGroup = segments[0] === '(auth)';
         const inOnboardingGroup = segments[0] === '(onboarding)';
         const inAdminGroup = segments[0] === '(admin)';
@@ -210,18 +227,13 @@ export default function RootLayout() {
         const isLandingPage = !segments[0];
         const inResetPassword = segments[0] === 'reset-password';
 
-        // =====================================================================
-        // A. PUBLIC SCREENS (No auth required)
-        // =====================================================================
+        // PUBLIC SCREENS
         if (isLandingPage || inVerifyScreen || inResetPassword) {
             return;
         }
 
-        // =====================================================================
-        // B. NOT AUTHENTICATED
-        // =====================================================================
+        // NOT AUTHENTICATED
         if (!isAuthenticated) {
-            // If not in auth group, redirect to login
             if (!inAuthGroup) {
                 setIsNavigating(true);
                 router.replace('/(auth)/login');
@@ -230,65 +242,31 @@ export default function RootLayout() {
             return;
         }
 
-        // =====================================================================
-        // C. AUTHENTICATED - WAIT FOR ONBOARDING CHECK
-        // =====================================================================
+        // WAIT FOR ONBOARDING CHECK
         if (!checked || isChecking) {
             return;
         }
 
-        // =====================================================================
-        // D. ADMIN USER
-        // =====================================================================
         // ADMIN USER
         if (user?.role === UserRole.ADMIN) {
-            // If admin is trying to access tabs or onboarding, redirect to admin
             if (inTabsGroup || inOnboardingGroup || inAuthGroup || isLandingPage) {
                 setIsNavigating(true);
                 router.replace('/(admin)');
                 setTimeout(() => setIsNavigating(false), 500);
                 return;
             }
-            // Allow admin to stay in admin group
             if (inAdminGroup) return;
             
-            // Fallback: redirect to admin
             setIsNavigating(true);
             router.replace('/(admin)');
             setTimeout(() => setIsNavigating(false), 500);
             return;
         }
 
-        // =====================================================================
-        // E. REGULAR USER - NOT ONBOARDED
-        // =====================================================================
+        // REGULAR USER - NOT ONBOARDED
         if (!isOnboarded) {
-            // If already in onboarding, allow it
             if (inOnboardingGroup) return;
             
-            // If in tabs, redirect to onboarding
-            if (inTabsGroup) {
-                setIsNavigating(true);
-                const route = user?.role === UserRole.COMPANY_USER 
-                    ? '/(onboarding)/company' 
-                    : '/(onboarding)/individual';
-                router.replace(route);
-                setTimeout(() => setIsNavigating(false), 500);
-                return;
-            }
-
-            // If in auth group, redirect to onboarding
-            if (inAuthGroup) {
-                setIsNavigating(true);
-                const route = user?.role === UserRole.COMPANY_USER 
-                    ? '/(onboarding)/company' 
-                    : '/(onboarding)/individual';
-                router.replace(route);
-                setTimeout(() => setIsNavigating(false), 500);
-                return;
-            }
-
-            // For any other route, redirect to onboarding
             setIsNavigating(true);
             const route = user?.role === UserRole.COMPANY_USER 
                 ? '/(onboarding)/company' 
@@ -298,10 +276,7 @@ export default function RootLayout() {
             return;
         }
 
-        // =====================================================================
-        // F. FULLY ONBOARDED REGULAR USER
-        // =====================================================================
-        // If user is in auth, onboarding, or landing page, redirect to dashboard
+        // FULLY ONBOARDED REGULAR USER
         if (inAuthGroup || inOnboardingGroup || isLandingPage) {
             setIsNavigating(true);
             router.replace('/(tabs)/dashboard');
@@ -309,8 +284,13 @@ export default function RootLayout() {
             return;
         }
 
-        // Allow access to tabs and other protected routes
-        // (User is already in a valid route)
+        // If regular user somehow ends up in admin group, redirect
+        if (inAdminGroup) {
+            setIsNavigating(true);
+            router.replace('/(tabs)/dashboard');
+            setTimeout(() => setIsNavigating(false), 500);
+            return;
+        }
 
     }, [
         appIsReady,
@@ -328,39 +308,29 @@ export default function RootLayout() {
     // ==========================================================================
     // 6. LOADING SCREENS
     // ==========================================================================
-    
-    // App initialization loading
     if (!appIsReady) {
         return (
             <View className="flex-1 items-center justify-center bg-background">
-                <ActivityIndicator size="large" color="hsl(325 45% 32%)" />
-                <Text className="mt-4 text-muted-foreground text-sm">
-                    Loading app...
-                </Text>
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground text-sm">Loading app...</Text>
             </View>
         );
     }
 
-    // Auth hydration loading
     if (isLoading) {
         return (
             <View className="flex-1 items-center justify-center bg-background">
-                <ActivityIndicator size="large" color="hsl(325 45% 32%)" />
-                <Text className="mt-4 text-muted-foreground text-sm">
-                    Loading your account...
-                </Text>
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground text-sm">Loading your account...</Text>
             </View>
         );
     }
 
-    // Onboarding check loading (only show if authenticated and checking)
     if (isAuthenticated && !checked && isChecking) {
         return (
             <View className="flex-1 items-center justify-center bg-background">
-                <ActivityIndicator size="large" color="hsl(325 45% 32%)" />
-                <Text className="mt-4 text-muted-foreground text-sm">
-                    Setting up your profile...
-                </Text>
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground text-sm">Setting up your profile...</Text>
             </View>
         );
     }
@@ -382,13 +352,11 @@ export default function RootLayout() {
                         </View>
                     )}
 
-                    {/* Keyboard Avoiding for Form Screens */}
                     <KeyboardAvoidingView 
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         className="flex-1"
                         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
                     >
-                        {/* Navigation Stack */}
                         <Stack
                             screenOptions={{
                                 headerShown: false,
@@ -437,7 +405,7 @@ export default function RootLayout() {
                                 name="(onboarding)" 
                                 options={{ 
                                     headerShown: false,
-                                    gestureEnabled: false, // Prevent going back during onboarding
+                                    gestureEnabled: false,
                                     animation: 'slide_from_right',
                                 }} 
                             />
@@ -459,25 +427,9 @@ export default function RootLayout() {
                                     gestureEnabled: false,
                                 }} 
                             />
-
-                            {/* Other Screens */}
-                            <Stack.Screen 
-                                name="permits" 
-                                options={{ 
-                                    headerShown: false,
-                                }} 
-                            />
-                            
-                            <Stack.Screen 
-                                name="admin" 
-                                options={{ 
-                                    headerShown: false,
-                                }} 
-                            />
                         </Stack>
                     </KeyboardAvoidingView>
 
-                    {/* Toast Notifications */}
                     <Toast 
                         position="top" 
                         topOffset={Platform.OS === 'android' ? 60 : 50}
@@ -486,7 +438,6 @@ export default function RootLayout() {
                     />
                 </View>
 
-                {/* Status Bar */}
                 <StatusBar style="auto" />
             </QueryClientProvider>
         </SafeAreaProvider>

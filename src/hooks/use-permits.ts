@@ -1,11 +1,11 @@
+// hooks/use-permits.ts - Simplified
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Platform } from 'react-native';
 import { api, UPLOAD_FILE_PATH } from '../lib/api';
-import { normalizeDateTime } from '../schemas/index';
 import type { CreatePermitInput } from '../schemas/index';
 import { ApiResponse } from '../types/api';
 
-/** Response body from generic `POST` upload (matches your `createSuccessResponse` payload). */
 export interface UploadFileResult {
     url: string;
     path: string;
@@ -14,7 +14,6 @@ export interface UploadFileResult {
     mimeType: string;
 }
 
-// Types matching the web app Prisma schema
 interface Permit {
     id: string;
     permitNumber: string;
@@ -52,16 +51,6 @@ interface Permit {
     }>;
 }
 
-interface PermitsResponse {
-    data: Permit[];
-    meta: {
-        page: number;
-        limit: number;
-        total: number;
-        totalPages: number;
-    };
-}
-
 interface UsePermitsParams {
     page?: number;
     limit?: number;
@@ -96,31 +85,15 @@ export function usePermit(id: string) {
     });
 }
 
-function buildCreatePermitPayload(data: CreatePermitInput): Record<string, unknown> {
-    const payload: Record<string, unknown> = { ...data };
-
-    if (data.validFrom) {
-        const d = normalizeDateTime(data.validFrom);
-        payload.validFrom = d ? d.toISOString() : data.validFrom;
-    }
-    if (data.validUntil) {
-        const d = normalizeDateTime(data.validUntil);
-        payload.validUntil = d ? d.toISOString() : data.validUntil;
-    }
-
-    return Object.fromEntries(
-        Object.entries(payload).filter(([, v]) => v !== undefined)
-    );
-}
-
+// ✅ Simplified: Just pass the data directly
 export function useCreatePermit() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (data: CreatePermitInput) => {
+        mutationFn: async ({ data, mode }: { data: CreatePermitInput; mode?: 'draft' | 'submit' }) => {
             const response = await api.post<ApiResponse<Permit>>(
-                '/permits',
-                buildCreatePermitPayload(data)
+                `/permits?mode=${mode || 'submit'}`,
+                data // ✅ Directly pass the data object
             );
             return response.data;
         },
@@ -130,10 +103,6 @@ export function useCreatePermit() {
     });
 }
 
-/**
- * 1) `POST` multipart to your upload route (`file` + `type: waste_evidence`).
- * 2) `POST` JSON to `/permits/:permitId/evidence` with path metadata (same as web `uploadEvidenceAsync`).
- */
 export function useUploadPermitWasteEvidence() {
     const queryClient = useQueryClient();
 

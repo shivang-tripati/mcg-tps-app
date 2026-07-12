@@ -11,8 +11,8 @@ import {
     LucideImages,
     LucideFileText,
 } from 'lucide-react-native';
-import { usePermit } from '../../hooks/use-permits';
-import { resolveEvidenceFileUrl } from '../../lib/utils';
+import { usePermit } from '../../../hooks/use-permits';
+import { resolveEvidenceFileUrl } from '../../../lib/utils';
 
 const STATUS_COLORS = {
     DRAFT: 'hsl(220 9% 46%)',

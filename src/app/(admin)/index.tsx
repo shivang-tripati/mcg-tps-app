@@ -216,11 +216,35 @@ export default function AdminDashboardScreen() {
     };
 
     const statCards: StatCardData[] = [
-        { title: 'Total Permits', value: stats?.totalPermits || 0, icon: LucideFileText, color: PRIMARY, route: '/(admin)/permits' },
-        { title: 'Pending', value: stats?.pendingApproval || 0, icon: LucideClock, color: 'hsl(38 92% 38%)', route: '/(admin)/permits' },
-        { title: 'In Transit', value: stats?.inTransit || 0, icon: LucideTruck, color: 'hsl(217 91% 60%)', route: '/(admin)/permits' },
-        { title: 'Completed', value: stats?.completedToday || 0, icon: LucideCheckCircle, color: 'hsl(142 72% 29%)', route: '/(admin)/permits' },
-    ];
+    {
+        title: 'Total Permits',
+        value: stats?.totalPermits || 0,
+        icon: LucideFileText,
+        color: '#7c3aed', // Violet
+        route: '/(admin)/permits',
+    },
+    {
+        title: 'Pending',
+        value: stats?.pendingApproval || 0,
+        icon: LucideClock,
+        color: '#d97706', // Amber
+        route: '/(admin)/permits',
+    },
+    {
+        title: 'In Transit',
+        value: stats?.inTransit || 0,
+        icon: LucideTruck,
+        color: '#3b82f6', // Blue
+        route: '/(admin)/permits',
+    },
+    {
+        title: 'Completed',
+        value: stats?.completedToday || 0,
+        icon: LucideCheckCircle,
+        color: '#16a34a', // Green
+        route: '/(admin)/permits',
+    },
+];
 
     const managementItems = [
         { title: 'Companies', subtitle: 'Organizations & registrations', icon: LucideBuilding2, color: '#7c3aed', route: '/companies' },
@@ -426,20 +450,20 @@ export default function AdminDashboardScreen() {
                                         style={{
                                             flexDirection: 'row',
                                             alignItems: 'center',
-                                            paddingVertical: 13,
+                                            paddingVertical: 5,
                                             paddingHorizontal: 16,
                                             borderBottomWidth: index !== recentActivity.length - 1 ? 1 : 0,
                                             borderBottomColor: '#f1f5f9',
                                         }}
                                     >
                                         {/* Status dot */}
-                                        <View style={{
+                                        {/* <View style={{
                                             width: 9,
                                             height: 9,
                                             borderRadius: 5,
                                             backgroundColor: STATUS_DOT_COLORS[activity.status] || '#94a3b8',
                                             marginRight: 12,
-                                        }} />
+                                        }} /> */}
 
                                         <View style={{ flex: 1, marginRight: 8 }}>
                                             <View className="flex-row items-center" style={{ gap: 8, marginBottom: 3 }}>

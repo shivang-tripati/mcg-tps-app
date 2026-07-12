@@ -222,6 +222,8 @@ export interface PermitDetail {
         fileName: string;
         filePath: string;
         description?: string | null;
+        uploadedAt: string;
+        createdAt?: string;
     }>;
     weighments: Array<{
         id: string;
@@ -242,6 +244,7 @@ export interface QRCodeData {
 }
 
 export interface ApprovePermitPayload {
+    validFrom: string;  // ISO datetime
     validUntil: string; // ISO datetime
 }
 
