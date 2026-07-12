@@ -1,13 +1,72 @@
-import { View, Text, ScrollView, Pressable } from 'react-native';
+import { View, Text, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Check, ChevronRight, User, Plus } from 'lucide-react-native'; 
 
 import WasteTruckIllustration from '../../assets/illustrations/WasteTruckIllustration2.png';
+import { useAuth } from '../lib/auth-store';
+import { useOnboarding } from '../lib/onboarding-store';
+import { useEffect, useState } from 'react';
+import { UserRole } from '../types/database';
 
 export default function LandingScreen() {
     const router = useRouter();
+    const { isAuthenticated, isLoading, user } = useAuth();
+    const { isOnboarded, checked } = useOnboarding();
+    const [isRedirecting, setIsRedirecting] = useState(false);
+
+
+    useEffect(() => {
+        // Don't redirect if still loading
+        if (isLoading) return;
+
+        // Don't redirect if already redirecting
+        if (isRedirecting) return;
+
+        // Check if user is authenticated
+        if (isAuthenticated && user) {
+            setIsRedirecting(true);
+
+            // Admin users go to admin panel
+            if (user.role === UserRole.ADMIN) {
+                router.replace('/(admin)');
+                return;
+            }
+
+            // Check onboarding status for regular users
+            if (checked) {
+                if (isOnboarded) {
+                    // Fully onboarded - go to dashboard
+                    router.replace('/(tabs)/dashboard');
+                } else {
+                    // Not onboarded - go to onboarding
+                    const route = user.role === UserRole.COMPANY_USER 
+                        ? '/(onboarding)/company' 
+                        : '/(onboarding)/individual';
+                    router.replace(route);
+                }
+            }
+            // If not checked, wait for onboarding check to complete
+            // The navigation guard in _layout.tsx will handle it
+        }
+    }, [isAuthenticated, isLoading, user, checked, isOnboarded, isRedirecting, router]);
+
+    // ✅ Show loading while checking auth
+    if (isLoading || isRedirecting) {
+        return (
+            <SafeAreaView className="flex-1 items-center justify-center bg-background">
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground">Loading...</Text>
+            </SafeAreaView>
+        );
+    }
+
+    // ✅ If authenticated and not redirected yet (shouldn't happen, but as fallback)
+    if (isAuthenticated) {
+        return null; // Will be redirected by the useEffect
+    }
+
 
     return (
         <SafeAreaView className="flex-1 bg-background">

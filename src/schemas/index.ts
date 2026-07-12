@@ -183,7 +183,7 @@ export const createPermitSchema = z.object({
     .string()
     .regex(
         /^([A-Z]{2})(\d{2}|\d{3})[A-Z]{0,1}(\d{4})(\d{7})$/i,
-        "License must be like: DL0420110012345 (2 letters + 2-3 digits + optional letter + 4 digits year + 7 digits number)"
+        "Enter correct driving license number of the driver."
     )
     .optional()
     .or(z.literal('')),

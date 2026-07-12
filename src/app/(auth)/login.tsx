@@ -92,53 +92,45 @@ export default function LoginScreen() {
     }, []);
 
     const onSubmit = async (data: LoginFormData) => {
-        setError(null);
-        try {
-            const response = await api.post('/auth/login', data);
+    setError(null);
+    try {
+        const response = await api.post('/auth/login', data);
 
-            // Check if response is successful
-            if (response.data.success) {
-                const { accessToken, refreshToken, user } = response.data.data;
+        if (response.data.success) {
+            const { accessToken, refreshToken, user } = response.data.data;
 
-                await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, data.email);
-                await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, data.password);
-                setHasSavedCredentials(true);
+            await SecureStore.setItemAsync(BIOMETRIC_EMAIL_KEY, data.email);
+            await SecureStore.setItemAsync(BIOMETRIC_PASSWORD_KEY, data.password);
+            setHasSavedCredentials(true);
 
-                await login(accessToken, refreshToken, user);
-                return;
-            }
-
-            // If success is false, get error from response
-            const errorMessage = response.data.error?.message || 'Login failed';
-            setError(errorMessage);
-            Alert.alert('Login Failed', errorMessage);
-            
-        } catch (err: any) {         
-            // Extract error message from the response
-            let message = 'Login failed. Please try again.';
-            
-            // Check if error has response with data
-            if (err.response?.data) {
-                const errorData = err.response.data;
-                // Our API returns { success: false, error: { message: '...' } }
-                if (errorData.error?.message) {
-                    message = errorData.error.message;
-                } else if (errorData.message) {
-                    message = errorData.message;
-                }
-            } else if (err.message) {
-                // Handle network errors or other errors
-                if (err.message === 'Network Error' || err.code === 'ECONNABORTED') {
-                    message = 'Network error. Please check your connection.';
-                } else {
-                    message = err.message;
-                }
-            }
-            
-            setError(message);
-            Alert.alert('Login Failed', message);
+            await login(accessToken, refreshToken, user);
+            return;
         }
-    };
+
+        const errorMessage = response.data.error?.message || 'Login failed';
+        setError(errorMessage);
+        Alert.alert('Login Failed', errorMessage);
+        
+    } catch (err: any) {
+        console.error('Login error:', err);
+        
+        // ✅ Use the helper to get user-friendly error message
+        let message = 'Login failed. Please try again.';
+        
+        if (err.isNetworkError || err.message === 'Network Error') {
+            message = 'Network connection error. Please check your internet connection and try again.';
+        } else if (err.response?.data?.error?.message) {
+            message = err.response.data.error.message;
+        } else if (err.response?.data?.message) {
+            message = err.response.data.message;
+        } else if (err.message) {
+            message = err.message;
+        }
+        
+        setError(message);
+        Alert.alert('Login Failed', message);
+    }
+};
 
     const handleBiometricAuth = async () => {
         try {

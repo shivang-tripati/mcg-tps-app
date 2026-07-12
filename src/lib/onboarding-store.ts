@@ -1,34 +1,33 @@
-// lib/onboarding-store.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api } from './api';
+import { api, isNetworkError } from './api';
 
 export interface OnboardingState {
-    /** Whether we've checked the backend for onboarding status */
     checked: boolean;
-    /** Whether the user has completed onboarding */
     isOnboarded: boolean;
-    /** Whether we're currently checking */
     isChecking: boolean;
-
-    /** For INDIVIDUAL: identity documents uploaded */
     hasAadhaar: boolean;
     hasPAN: boolean;
     aadhaarDoc: any | null;
     panDoc: any | null;
-
-    /** For COMPANY_USER: company association */
     hasCompany: boolean;
     companyId: string | null;
     hasProject: boolean;
+    /** Cache the projects data to avoid repeated API calls */
+    cachedProjects: any[] | null;
+    /** Last successful check timestamp */
+    lastCheckedAt: number | null;
 
-    /** Actions */
     checkOnboardingStatus: (user: { role: string; companyId?: string | null }) => Promise<void>;
+    handleIndividualOnboarding: () => Promise<void>;
+    handleCompanyOnboarding: (user: { role: string; companyId?: string | null }) => Promise<void>;
     setDocumentUploaded: (type: 'AADHAAR' | 'PAN', doc: any) => void;
     setCompanyCreated: (companyId: string) => void;
     setProjectCreated: () => void;
     reset: () => void;
+    /** Force refresh onboarding status */
+    refreshStatus: (user: { role: string; companyId?: string | null }) => Promise<void>;
 }
 
 export const useOnboarding = create<OnboardingState>()(
@@ -44,95 +43,204 @@ export const useOnboarding = create<OnboardingState>()(
             hasCompany: false,
             companyId: null,
             hasProject: false,
+            cachedProjects: null,
+            lastCheckedAt: null,
 
-            checkOnboardingStatus: async (user) => {
+            // ✅ Define the handler methods as regular functions (not arrow functions)
+            // This avoids 'this' binding issues
+            handleIndividualOnboarding: async () => {
+                console.log('Checking INDIVIDUAL onboarding');
+                try {
+                    const response = await api.get('/profile', { timeout: 5000 });
+                    const profile = response.data.data;
+                    const docs = profile?.identityDocuments || [];
+
+                    const aadhaar = docs.find((d: any) => d.type === 'AADHAAR');
+                    const pan = docs.find((d: any) => d.type === 'PAN');
+
+                    const hasAadhaar = !!aadhaar;
+                    const hasPAN = !!pan;
+
+                    console.log('Individual docs found:', { hasAadhaar, hasPAN });
+
+                    set({
+                        checked: true,
+                        isOnboarded: hasAadhaar && hasPAN,
+                        hasAadhaar,
+                        hasPAN,
+                        aadhaarDoc: aadhaar || null,
+                        panDoc: pan || null,
+                        isChecking: false,
+                        lastCheckedAt: Date.now(),
+                    });
+                } catch (error) {
+                    console.error('Individual onboarding check failed:', error);
+                    // ✅ Don't set checked to true on error - allow retry
+                    set({ isChecking: false });
+                    throw error;
+                }
+            },
+
+            handleCompanyOnboarding: async (user: { role: string; companyId?: string | null }) => {
+    const hasCompany = !!user.companyId;
+    console.log('Has company:', hasCompany, 'Company ID:', user.companyId);
+    
+    let hasProject = false;
+    let projects: any[] = [];
+
+    if (hasCompany) {
+        try {
+            console.log('Fetching projects with timeout...');
+            const resp = await api.get('/projects', { timeout: 5000 });
+            projects = resp.data.data || [];
+            hasProject = projects.length > 0;
+            console.log('Projects found:', projects.length);
+            
+            // ✅ Cache successful response
+            set({ cachedProjects: projects });
+        } catch (error: any) {
+            console.error('Error fetching projects:', error);
+            
+            // ✅ Check if it's a network error
+            if (isNetworkError(error)) {
+                console.log('Network error fetching projects - using cache if available');
+                const cached = get().cachedProjects;
+                if (cached !== null) {
+                    console.log('Using cached projects:', cached.length);
+                    projects = cached;
+                    hasProject = cached.length > 0;
+                } else {
+                    // ✅ If no cache and network error, mark as not onboarded but don't fail
+                    hasProject = false;
+                }
+            } else {
+                // ✅ Use cached projects if available
+                const cached = get().cachedProjects;
+                if (cached !== null) {
+                    console.log('Using cached projects:', cached.length);
+                    projects = cached;
+                    hasProject = cached.length > 0;
+                } else {
+                    hasProject = false;
+                }
+            }
+        }
+    }
+
+    const isOnboarded = hasCompany && hasProject;
+    console.log('Company user status:', { hasCompany, hasProject, isOnboarded });
+
+    set({
+        checked: true,
+        isOnboarded,
+        hasCompany,
+        companyId: user.companyId || null,
+        hasProject,
+        isChecking: false,
+        lastCheckedAt: Date.now(),
+    });
+},
+
+            checkOnboardingStatus: async (user: { role: string; companyId?: string | null }) => {
                 // ✅ Prevent duplicate checks
-                if (get().isChecking) return;
-                
-                // ✅ If already checked and user is onboarded, skip
-                if (get().checked && get().isOnboarded) {
+                if (get().isChecking) {
+                    console.log('Onboarding check already in progress');
                     return;
                 }
 
+                // ✅ Use cached data if available and recent (within 5 minutes)
+                const lastChecked = get().lastCheckedAt;
+                const cacheAge = lastChecked ? Date.now() - lastChecked : Infinity;
+                const isCacheValid = cacheAge < 5 * 60 * 1000; // 5 minutes
+
+                if (get().checked && get().isOnboarded && isCacheValid) {
+                    console.log('Using cached onboarding status');
+                    return;
+                }
+
+                console.log('Starting onboarding check for user:', user.role);
                 set({ isChecking: true });
 
                 try {
                     if (user.role === 'INDIVIDUAL') {
-                        const response = await api.get('/profile');
-                        const profile = response.data.data;
-                        const docs = profile?.identityDocuments || [];
-
-                        const aadhaar = docs.find((d: any) => d.type === 'AADHAAR');
-                        const pan = docs.find((d: any) => d.type === 'PAN');
-
-                        const hasAadhaar = !!aadhaar;
-                        const hasPAN = !!pan;
-
-                        set({
-                            checked: true,
-                            isOnboarded: hasAadhaar && hasPAN,
-                            hasAadhaar,
-                            hasPAN,
-                            aadhaarDoc: aadhaar || null,
-                            panDoc: pan || null,
-                            isChecking: false,
-                        });
+                        // ✅ Call the handler directly using the get() function
+                        await get().handleIndividualOnboarding();
                     } else if (user.role === 'COMPANY_USER') {
-                        const hasCompany = !!user.companyId;
-                        let hasProject = false;
-
-                        if (hasCompany) {
-                            try {
-                                const resp = await api.get('/projects');
-                                const projects = resp.data.data || [];
-                                hasProject = projects.length > 0;
-                            } catch {
-                                hasProject = false;
-                            }
-                        }
-
-                        set({
-                            checked: true,
-                            isOnboarded: hasCompany && hasProject,
-                            hasCompany,
-                            companyId: user.companyId || null,
-                            hasProject,
-                            isChecking: false,
-                        });
+                        // ✅ Call the handler directly using the get() function
+                        await get().handleCompanyOnboarding(user);
                     } else {
                         // ADMIN / GUEST — skip onboarding
-                        set({ checked: true, isOnboarded: true, isChecking: false });
+                        console.log('Admin or guest user - skipping onboarding');
+                        set({ 
+                            checked: true, 
+                            isOnboarded: true, 
+                            isChecking: false,
+                            lastCheckedAt: Date.now(),
+                        });
                     }
                 } catch (error) {
                     console.error('Onboarding check failed:', error);
-                    // ✅ On error, set checked to true but NOT onboarded
-                    // This prevents infinite loading
-                    set({ 
-                        checked: true, 
-                        isOnboarded: false, 
-                        isChecking: false 
-                    });
+                    
+                    // ✅ On error, try to use cached data
+                    const cachedProjects = get().cachedProjects;
+                    if (cachedProjects !== null) {
+                        console.log('Using cached projects data on error');
+                        const hasProject = cachedProjects.length > 0;
+                        set({
+                            checked: true,
+                            isOnboarded: get().hasCompany && hasProject,
+                            hasProject,
+                            isChecking: false,
+                            lastCheckedAt: Date.now(),
+                        });
+                    } else {
+                        set({ 
+                            checked: true, 
+                            isOnboarded: false, 
+                            isChecking: false,
+                            lastCheckedAt: Date.now(),
+                        });
+                    }
                 }
             },
 
-            setDocumentUploaded: (type, doc) => {
+            refreshStatus: async (user: { role: string; companyId?: string | null }) => {
+                // Clear cache and recheck
+                set({ 
+                    checked: false, 
+                    isOnboarded: false,
+                    cachedProjects: null,
+                    lastCheckedAt: null,
+                });
+                await get().checkOnboardingStatus(user);
+            },
+
+            setDocumentUploaded: (type: 'AADHAAR' | 'PAN', doc: any) => {
                 if (type === 'AADHAAR') {
                     const newState = { hasAadhaar: true, aadhaarDoc: doc };
                     const hasPAN = get().hasPAN;
-                    set({ ...newState, isOnboarded: hasPAN });
+                    set({ ...newState, isOnboarded: hasPAN, lastCheckedAt: Date.now() });
                 } else {
                     const newState = { hasPAN: true, panDoc: doc };
                     const hasAadhaar = get().hasAadhaar;
-                    set({ ...newState, isOnboarded: hasAadhaar });
+                    set({ ...newState, isOnboarded: hasAadhaar, lastCheckedAt: Date.now() });
                 }
             },
 
-            setCompanyCreated: (companyId) => {
-                set({ hasCompany: true, companyId });
+            setCompanyCreated: (companyId: string) => {
+                set({ 
+                    hasCompany: true, 
+                    companyId,
+                    lastCheckedAt: Date.now(),
+                });
             },
 
             setProjectCreated: () => {
-                set({ hasProject: true, isOnboarded: true });
+                set({ 
+                    hasProject: true, 
+                    isOnboarded: true,
+                    lastCheckedAt: Date.now(),
+                });
             },
 
             reset: () => {
@@ -147,13 +255,14 @@ export const useOnboarding = create<OnboardingState>()(
                     hasCompany: false,
                     companyId: null,
                     hasProject: false,
+                    cachedProjects: null,
+                    lastCheckedAt: null,
                 });
             },
         }),
         {
-            name: 'onboarding-storage', // ✅ Persist to AsyncStorage
+            name: 'onboarding-storage',
             storage: createJSONStorage(() => AsyncStorage),
-            // ✅ Only persist these fields to avoid stale data
             partialize: (state) => ({
                 checked: state.checked,
                 isOnboarded: state.isOnboarded,
@@ -162,6 +271,8 @@ export const useOnboarding = create<OnboardingState>()(
                 hasCompany: state.hasCompany,
                 hasProject: state.hasProject,
                 companyId: state.companyId,
+                cachedProjects: state.cachedProjects,
+                lastCheckedAt: state.lastCheckedAt,
             }),
         }
     )

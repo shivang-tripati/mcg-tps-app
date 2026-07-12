@@ -30,7 +30,7 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
             <Text className="text-muted-foreground text-center mb-8">
                 {error.message || 'An unexpected error occurred.'}
             </Text>
-            <TouchableOpacity 
+            <TouchableOpacity
                 className="bg-primary px-8 py-4 rounded-xl active:opacity-80"
                 onPress={retry}
             >
@@ -46,20 +46,20 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
 export default function RootLayout() {
     // Auth state
     const { isAuthenticated, isLoading, hydrate, user } = useAuth();
-    
+
     // Onboarding state
-    const { 
-        checked, 
-        isOnboarded, 
-        isChecking, 
-        checkOnboardingStatus, 
-        reset: resetOnboarding 
+    const {
+        checked,
+        isOnboarded,
+        isChecking,
+        checkOnboardingStatus,
+        reset: resetOnboarding
     } = useOnboarding();
-    
+
     // Navigation
     const segments = useSegments();
     const router = useRouter();
-    
+
     // Local state
     const [isOffline, setIsOffline] = useState(false);
     const [appIsReady, setAppIsReady] = useState(false);
@@ -88,14 +88,14 @@ export default function RootLayout() {
     // ==========================================================================
     useEffect(() => {
         let wasOffline = false;
-        
+
         const unsubscribe = NetInfo.addEventListener((state) => {
             const isConnected = state.isConnected !== false;
             const wasOfflineBefore = wasOffline;
             wasOffline = !isConnected;
-            
+
             setIsOffline(!isConnected);
-            
+
             if (!isConnected) {
                 // Show offline toast
                 Toast.show({
@@ -117,7 +117,7 @@ export default function RootLayout() {
                 refreshAppData();
             }
         });
-        
+
         return () => unsubscribe();
     }, []);
 
@@ -136,40 +136,40 @@ export default function RootLayout() {
     // 3. ONBOARDING STATUS CHECK
     // ==========================================================================
     useEffect(() => {
-    const checkOnboarding = async () => {
-        if (checked) return;
-        
-        if (isLoading) return;
-        
-        if (!isAuthenticated) return;
-        
-        if (isChecking) return;
-        
-        if (!user) return;
+        const checkOnboarding = async () => {
+            if (checked) return;
 
-        try {
-            await checkOnboardingStatus(user);
-        } catch (error) {
-            console.error('Failed to check onboarding status:', error);
-            useOnboarding.setState({ checked: true, isChecking: false });
+            if (isLoading) return;
+
+            if (!isAuthenticated) return;
+
+            if (isChecking) return;
+
+            if (!user) return;
+
+            try {
+                await checkOnboardingStatus(user);
+            } catch (error) {
+                console.error('Failed to check onboarding status:', error);
+                useOnboarding.setState({ checked: true, isChecking: false });
+            }
+        };
+
+        checkOnboarding();
+
+        // Reset onboarding state when user logs out
+        if (!isAuthenticated && checked) {
+            resetOnboarding();
         }
-    };
-
-    checkOnboarding();
-
-    // Reset onboarding state when user logs out
-    if (!isAuthenticated && checked) {
-        resetOnboarding();
-    }
-}, [
-    isAuthenticated, 
-    isLoading, 
-    user, 
-    checked, 
-    isChecking, 
-    checkOnboardingStatus, 
-    resetOnboarding
-]);
+    }, [
+        isAuthenticated,
+        isLoading,
+        user,
+        checked,
+        isChecking,
+        checkOnboardingStatus,
+        resetOnboarding
+    ]);
 
     // ==========================================================================
     // 4. DEEP LINKING
@@ -178,17 +178,17 @@ export default function RootLayout() {
         const handleDeepLink = (event: { url: string }) => {
             const url = event.url;
             const { path, queryParams } = Linking.parse(url);
-            
+
             if (path === 'reset-password' && queryParams?.token) {
                 router.push(`/reset-password?token=${queryParams.token}`);
                 return;
             }
-            
+
             if (path === 'verify-email' && queryParams?.token) {
                 router.push(`/verify?token=${queryParams.token}`);
                 return;
             }
-            
+
             if (path === 'permit' && queryParams?.id) {
                 // Handle deep link to permit based on user role
                 if (user?.role === UserRole.ADMIN) {
@@ -224,15 +224,15 @@ export default function RootLayout() {
         const inAdminGroup = segments[0] === '(admin)';
         const inTabsGroup = segments[0] === '(tabs)';
         const inVerifyScreen = segments[0] === 'verify';
-        const isLandingPage = !segments[0];
+        const isLandingPage = !segments[0] || segments[0] === 'index';
         const inResetPassword = segments[0] === 'reset-password';
 
-        // PUBLIC SCREENS
+        // ✅ PUBLIC SCREENS - Always accessible (including landing page)
         if (isLandingPage || inVerifyScreen || inResetPassword) {
             return;
         }
 
-        // NOT AUTHENTICATED
+        // ✅ NOT AUTHENTICATED - Redirect to login
         if (!isAuthenticated) {
             if (!inAuthGroup) {
                 setIsNavigating(true);
@@ -242,41 +242,36 @@ export default function RootLayout() {
             return;
         }
 
-        // WAIT FOR ONBOARDING CHECK
+        // ✅ WAIT FOR ONBOARDING CHECK
         if (!checked || isChecking) {
             return;
         }
 
-        // ADMIN USER
+        // ✅ ADMIN USER
         if (user?.role === UserRole.ADMIN) {
-            if (inTabsGroup || inOnboardingGroup || inAuthGroup || isLandingPage) {
+            if (!inAdminGroup) {
                 setIsNavigating(true);
                 router.replace('/(admin)');
                 setTimeout(() => setIsNavigating(false), 500);
-                return;
             }
-            if (inAdminGroup) return;
-            
-            setIsNavigating(true);
-            router.replace('/(admin)');
-            setTimeout(() => setIsNavigating(false), 500);
             return;
         }
 
-        // REGULAR USER - NOT ONBOARDED
+        // ✅ REGULAR USER - NOT ONBOARDED
         if (!isOnboarded) {
             if (inOnboardingGroup) return;
-            
+
             setIsNavigating(true);
-            const route = user?.role === UserRole.COMPANY_USER 
-                ? '/(onboarding)/company' 
+            const route = user?.role === UserRole.COMPANY_USER
+                ? '/(onboarding)/company'
                 : '/(onboarding)/individual';
             router.replace(route);
             setTimeout(() => setIsNavigating(false), 500);
             return;
         }
 
-        // FULLY ONBOARDED REGULAR USER
+        // ✅ FULLY ONBOARDED REGULAR USER
+        // Redirect auth, onboarding, and landing pages to dashboard
         if (inAuthGroup || inOnboardingGroup || isLandingPage) {
             setIsNavigating(true);
             router.replace('/(tabs)/dashboard');
@@ -284,11 +279,16 @@ export default function RootLayout() {
             return;
         }
 
-        // If regular user somehow ends up in admin group, redirect
+        // ✅ If regular user somehow ends up in admin group, redirect
         if (inAdminGroup) {
             setIsNavigating(true);
             router.replace('/(tabs)/dashboard');
             setTimeout(() => setIsNavigating(false), 500);
+            return;
+        }
+
+        // ✅ Allow access to tabs
+        if (inTabsGroup) {
             return;
         }
 
@@ -352,7 +352,7 @@ export default function RootLayout() {
                         </View>
                     )}
 
-                    <KeyboardAvoidingView 
+                    <KeyboardAvoidingView
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         className="flex-1"
                         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
@@ -366,72 +366,72 @@ export default function RootLayout() {
                             }}
                         >
                             {/* Public Screens */}
-                            <Stack.Screen 
-                                name="index" 
-                                options={{ 
+                            <Stack.Screen
+                                name="index"
+                                options={{
                                     headerShown: false,
                                     gestureEnabled: false,
-                                }} 
+                                }}
                             />
-                            
-                            <Stack.Screen 
-                                name="verify" 
-                                options={{ 
+
+                            <Stack.Screen
+                                name="verify"
+                                options={{
                                     headerShown: false,
                                     gestureEnabled: false,
-                                }} 
+                                }}
                             />
-                            
-                            <Stack.Screen 
-                                name="reset-password" 
-                                options={{ 
+
+                            <Stack.Screen
+                                name="reset-password"
+                                options={{
                                     headerShown: false,
                                     gestureEnabled: false,
-                                }} 
+                                }}
                             />
 
                             {/* Auth Screens */}
-                            <Stack.Screen 
-                                name="(auth)" 
-                                options={{ 
+                            <Stack.Screen
+                                name="(auth)"
+                                options={{
                                     headerShown: false,
                                     gestureEnabled: false,
                                     animation: 'fade',
-                                }} 
+                                }}
                             />
 
                             {/* Onboarding Screens */}
-                            <Stack.Screen 
-                                name="(onboarding)" 
-                                options={{ 
+                            <Stack.Screen
+                                name="(onboarding)"
+                                options={{
                                     headerShown: false,
                                     gestureEnabled: false,
                                     animation: 'slide_from_right',
-                                }} 
+                                }}
                             />
 
                             {/* Main App Screens */}
-                            <Stack.Screen 
-                                name="(tabs)" 
-                                options={{ 
+                            <Stack.Screen
+                                name="(tabs)"
+                                options={{
                                     headerShown: false,
                                     gestureEnabled: false,
-                                }} 
+                                }}
                             />
 
                             {/* Admin Screens */}
-                            <Stack.Screen 
-                                name="(admin)" 
-                                options={{ 
+                            <Stack.Screen
+                                name="(admin)"
+                                options={{
                                     headerShown: false,
                                     gestureEnabled: false,
-                                }} 
+                                }}
                             />
                         </Stack>
                     </KeyboardAvoidingView>
 
-                    <Toast 
-                        position="top" 
+                    <Toast
+                        position="top"
                         topOffset={Platform.OS === 'android' ? 60 : 50}
                         visibilityTime={3000}
                         autoHide={true}

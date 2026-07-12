@@ -1,4 +1,3 @@
-// app/(tabs)/permits/new.tsx
 import {
     View,
     Text,
@@ -10,9 +9,7 @@ import {
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    Modal,
     Image,
-    TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -24,16 +21,7 @@ import {
     LucideImagePlus,
     LucideX,
     LucideMapPin,
-    LucideCalendar,
-    LucideClock,
-    LucideUser,
-    LucideTruck,
-    LucidePackage,
-    LucideBuilding2,
-    LucideMap,
-    LucideCheckCircle,
 } from 'lucide-react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Button } from '../../../components/ui/button';
@@ -48,18 +36,17 @@ import {
     WasteType,
     type CreatePermitInput,
 } from '../../../schemas/index';
+import DateTimeFormField from '../../../components/ui/date-time-from-field';
+import { parseDateTimeField } from '../../../lib/utils';
 
-import { parseDateTimeField, formatLocalDateTime, mergeDateAndTime } from '../../../lib/utils'
-
+// ============================================================================
+// CONSTANTS
+// ============================================================================
 
 const WASTE_LABELS: Record<(typeof WasteType)[number], { label: string; subtitle: string }> = {
     CND_SEGREGATED: { label: 'C&D Segregated', subtitle: 'Sorted by material type' },
     CND_UNSEGREGATED: { label: 'C&D Unsegregated', subtitle: 'Mixed construction waste' },
 };
-
-// ============================================================================
-// STEPS CONFIGURATION
-// ============================================================================
 
 const STEPS = [
     { number: 1, title: 'Waste Info' },
@@ -92,6 +79,7 @@ export default function NewPermitScreen() {
 
     const form = useForm<CreatePermitInput>({
         resolver: zodResolver(createPermitSchema),
+        mode: 'onChange', // ✅ Validate on change
         defaultValues: {
             wasteType: 'CND_SEGREGATED',
             estimatedWeight: undefined,
@@ -115,14 +103,56 @@ export default function NewPermitScreen() {
         },
     });
 
-    const { control, handleSubmit, setValue, trigger, formState: { errors, isSubmitting } } = form;
+    const { control, handleSubmit, setValue, trigger, getValues, formState: { errors, isSubmitting, isValid } } = form;
 
     const projectId = useWatch({ control, name: 'projectId' });
     const validFrom = useWatch({ control, name: 'validFrom' });
     const validUntil = useWatch({ control, name: 'validUntil' });
     const addressLocked = isCompanyUser && !!projectId;
 
-    // Auto-fill address when project is selected (Company Users only)
+    // ==========================================================================
+    // STEP VALIDATION - Each step validates ONLY its own fields
+    // ==========================================================================
+
+    const stepFields: Record<number, (keyof CreatePermitInput)[]> = {
+        1: ['wasteType', 'estimatedWeight', 'estimatedVolume', 'wasteDescription'],
+        2: ['pickupAddress', 'pickupCity', 'pickupState', 'pickupPincode', 'plantId'],
+        3: ['driverName', 'driverPhone', 'vehicleNumber', 'vehicleType', 'licenseNumber'],
+        4: ['validFrom', 'validUntil'],
+    };
+
+    // ✅ Validate current step fields
+    const validateStep = async (step: number): Promise<boolean> => {
+        const fields = stepFields[step] || [];
+        const result = await trigger(fields, { shouldFocus: true });
+        return result;
+    };
+
+    // ✅ Check if current step is valid
+    const isStepValid = (step: number): boolean => {
+        const fields = stepFields[step] || [];
+        // Check if any field in the step has an error
+        for (const field of fields) {
+            if (errors[field]) return false;
+        }
+        // Check if required fields have values
+        const values = getValues();
+        for (const field of fields) {
+            if (field === 'estimatedWeight' || field === 'estimatedVolume' || 
+                field === 'wasteDescription' || field === 'driverName' ||
+                field === 'driverPhone' || field === 'vehicleNumber' ||
+                field === 'vehicleType' || field === 'licenseNumber') {
+                continue; // These are optional
+            }
+            if (!values[field]) return false;
+        }
+        return true;
+    };
+
+    // ==========================================================================
+    // AUTO-FILL ADDRESS FROM PROJECT
+    // ==========================================================================
+
     useEffect(() => {
         if (!isCompanyUser || !projectId) return;
         const p = projects.find((x) => x.id === projectId);
@@ -200,40 +230,35 @@ export default function NewPermitScreen() {
     // STEP NAVIGATION
     // ==========================================================================
 
-    const stepFields: Record<number, (keyof CreatePermitInput)[]> = {
-        1: ['wasteType', 'estimatedWeight', 'estimatedVolume', 'wasteDescription'],
-        2: ['pickupAddress', 'pickupCity', 'pickupState', 'pickupPincode', 'plantId'],
-        3: ['driverName', 'driverPhone', 'vehicleNumber', 'vehicleType', 'licenseNumber'],
-        4: ['validFrom', 'validUntil'],
-    };
-
     const goNext = async () => {
-        const fields = stepFields[currentStep] || [];
-        const ok = await trigger(fields, { shouldFocus: true });
-        if (ok) setCurrentStep((s) => Math.min(STEPS.length, s + 1));
+        // ✅ Validate current step before proceeding
+        const valid = await validateStep(currentStep);
+        if (valid) {
+            setCurrentStep((s) => Math.min(STEPS.length, s + 1));
+        }
     };
 
     const goBack = () => {
         setCurrentStep((s) => Math.max(1, s - 1));
     };
 
+    // ==========================================================================
+    // SUBMIT
+    // ==========================================================================
 
     const onSubmit = async (data: CreatePermitInput) => {
         const payload: CreatePermitInput = {
             ...data,
-            // Company/Project logic
             companyId: isCompanyUser && user?.companyId ? user.companyId : undefined,
             projectId: isCompanyUser ? data.projectId : undefined,
         };
 
-        // Clean up for non-company users
         if (!isCompanyUser) {
             delete payload.projectId;
             delete payload.companyId;
         }
 
         try {
-            // ✅ Direct mutation with data and mode
             const response = await createPermit.mutateAsync({
                 data: payload,
                 mode: submitMode,
@@ -246,7 +271,6 @@ export default function NewPermitScreen() {
 
             const permitId = response.data.id;
 
-            // Upload evidence
             if (evidenceUris.length > 0) {
                 try {
                     for (const uri of evidenceUris) {
@@ -274,12 +298,12 @@ export default function NewPermitScreen() {
     };
 
     // ==========================================================================
-    // RENDER
+    // RENDER FUNCTIONS
     // ==========================================================================
 
     const renderStep1 = () => (
         <View>
-            <Text className="text-lg font-semibold text-foreground mb-4">Waste Information</Text>
+            <Text className="text-lg font-semibold text-foreground mb-2">Waste Information</Text>
             <Text className="text-muted-foreground text-sm mb-4">
                 Describe the type and quantity of waste being moved.
             </Text>
@@ -352,13 +376,18 @@ export default function NewPermitScreen() {
                 )}
             />
 
-            <Button label="Next →" onPress={goNext} className="mt-4" />
+            <View className="mt-4 flex-row items-center justify-between">
+                <Text className="text-sm text-muted-foreground">
+                    {isStepValid(1) ? '✅ Step complete' : '⚠️ Please fill all required fields'}
+                </Text>
+                <Button label="Next →" onPress={goNext} />
+            </View>
         </View>
     );
 
     const renderStep2 = () => (
         <View>
-            <Text className="text-lg font-semibold text-foreground mb-4">Location & Plant</Text>
+            <Text className="text-lg font-semibold text-foreground mb-2">Location & Plant</Text>
             <Text className="text-muted-foreground text-sm mb-4">
                 Provide the location where waste will be collected and select the processing plant.
             </Text>
@@ -408,8 +437,6 @@ export default function NewPermitScreen() {
                                 Address will be auto-filled from project.
                             </Text>
                         </View>
-
-
                     )}
                 </>
             )}
@@ -508,16 +535,21 @@ export default function NewPermitScreen() {
                 />
             )}
 
-            <View className="flex-row gap-3 mt-4">
-                <Button label="← Back" variant="outline" onPress={goBack} className="flex-1" />
-                <Button label="Next →" onPress={goNext} className="flex-1" />
+            <View className="mt-4 flex-row items-center justify-between">
+                <Text className="text-sm text-muted-foreground">
+                    {isStepValid(2) ? '✅ Step complete' : '⚠️ Please fill all required fields'}
+                </Text>
+                <View className="flex-row gap-3">
+                    <Button label="← Back" variant="outline" onPress={goBack} />
+                    <Button label="Next →" onPress={goNext} />
+                </View>
             </View>
         </View>
     );
 
     const renderStep3 = () => (
         <View>
-            <Text className="text-lg font-semibold text-foreground mb-4">Vehicle & Driver</Text>
+            <Text className="text-lg font-semibold text-foreground mb-2">Vehicle & Driver</Text>
             <Text className="text-muted-foreground text-sm mb-4">
                 Enter driver, vehicle, and license information.
             </Text>
@@ -557,15 +589,20 @@ export default function NewPermitScreen() {
                 control={control}
                 name="licenseNumber"
                 render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                        label="Driver's License Number"
-                        placeholder="DL0420110012345"
-                        autoCapitalize="characters"
-                        onBlur={onBlur}
-                        onChangeText={onChange}
-                        value={value || ''}
-                        error={errors.licenseNumber?.message}
-                    />
+                    <View>
+                        <Input
+                            label="Driver's License Number"
+                            placeholder="DL0420110012345"
+                            autoCapitalize="characters"
+                            onBlur={onBlur}
+                            onChangeText={onChange}
+                            value={value || ''}
+                            error={errors.licenseNumber?.message}
+                        />
+                        <Text className="text-xs text-muted-foreground mt-1 ml-1">
+                            Format: 2 letters + 2-3 digits + optional letter + 4 digits year + 7 digits number
+                        </Text>
+                    </View>
                 )}
             />
 
@@ -573,16 +610,20 @@ export default function NewPermitScreen() {
                 control={control}
                 name="vehicleNumber"
                 render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                        label="Vehicle Registration Number"
-                        placeholder="HR51AB1234"
-                        autoCapitalize="characters"
-                        onBlur={onBlur}
-                        onChangeText={onChange}
-                        value={value || ''}
-                        error={errors.vehicleNumber?.message}
-
-                    />
+                    <View>
+                        <Input
+                            label="Vehicle Registration Number"
+                            placeholder="HR51AB1234"
+                            autoCapitalize="characters"
+                            onBlur={onBlur}
+                            onChangeText={onChange}
+                            value={value || ''}
+                            error={errors.vehicleNumber?.message}
+                        />
+                        <Text className="text-xs text-muted-foreground mt-1 ml-1">
+                            Enter vehicle registration number as shown on the RC.
+                        </Text>
+                    </View>
                 )}
             />
 
@@ -601,16 +642,21 @@ export default function NewPermitScreen() {
                 )}
             />
 
-            <View className="flex-row gap-3 mt-4">
-                <Button label="← Back" variant="outline" onPress={goBack} className="flex-1" />
-                <Button label="Next →" onPress={goNext} className="flex-1" />
+            <View className="mt-4 flex-row items-center justify-between">
+                <Text className="text-sm text-muted-foreground">
+                    {isStepValid(3) ? '✅ Step complete' : '⚠️ Please fill all required fields'}
+                </Text>
+                <View className="flex-row gap-3">
+                    <Button label="← Back" variant="outline" onPress={goBack} />
+                    <Button label="Next →" onPress={goNext} />
+                </View>
             </View>
         </View>
     );
 
     const renderStep4 = () => (
         <View>
-            <Text className="text-lg font-semibold text-foreground mb-4">Schedule & Evidence</Text>
+            <Text className="text-lg font-semibold text-foreground mb-2">Schedule & Evidence</Text>
             <Text className="text-muted-foreground text-sm mb-4">
                 Set the permit validity period and upload evidence.
             </Text>
@@ -663,13 +709,16 @@ export default function NewPermitScreen() {
                 </View>
             )}
 
-            <View className="flex-row gap-3 mt-2">
-                <Button
-                    label="← Back"
-                    variant="outline"
-                    onPress={goBack}
-                    className="flex-1"
-                />
+            <View className="mt-4 flex-row items-center justify-between">
+                <Text className="text-sm text-muted-foreground">
+                    {isStepValid(4) ? '✅ Step complete' : '⚠️ Please fill all required fields'}
+                </Text>
+                <View className="flex-row gap-3">
+                    <Button label="← Back" variant="outline" onPress={goBack} />
+                </View>
+            </View>
+
+            <View className="flex-row gap-3 mt-4">
                 <Button
                     label="Save as Draft"
                     variant="outline"
@@ -693,10 +742,6 @@ export default function NewPermitScreen() {
         </View>
     );
 
-    // ==========================================================================
-    // RENDER STEPS
-    // ==========================================================================
-
     const renderStep = () => {
         switch (currentStep) {
             case 1: return renderStep1();
@@ -707,13 +752,8 @@ export default function NewPermitScreen() {
         }
     };
 
-    // ==========================================================================
-    // MAIN RETURN
-    // ==========================================================================
-
     return (
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-            {/* Header */}
             <View className="px-6 pt-4 pb-3 bg-primary flex-row items-center">
                 <TouchableOpacity onPress={() => router.back()} className="mr-3 p-1">
                     <LucideArrowLeft size={24} color="white" />
@@ -721,10 +761,8 @@ export default function NewPermitScreen() {
                 <Text className="text-white text-lg font-bold">New Permit</Text>
             </View>
 
-            {/* Steps */}
             <StepIndicator steps={STEPS} currentStep={currentStep} />
 
-            {/* Form */}
             <KeyboardAvoidingView
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
@@ -744,124 +782,5 @@ export default function NewPermitScreen() {
                 </TouchableWithoutFeedback>
             </KeyboardAvoidingView>
         </SafeAreaView>
-    );
-}
-
-// ============================================================================
-// DATE TIME PICKER COMPONENT
-// ============================================================================
-
-function DateTimeFormField({
-    label,
-    value,
-    onChange,
-    error,
-    minimumDate,
-}: {
-    label: string;
-    value: string;
-    onChange: (v: string) => void;
-    error?: string;
-    minimumDate?: Date;
-}) {
-    const [iosOpen, setIosOpen] = useState(false);
-    const [androidStep, setAndroidStep] = useState<'date' | 'time' | null>(null);
-    const [pendingDate, setPendingDate] = useState<Date | null>(null);
-
-    const date = parseDateTimeField(value);
-
-    const openPicker = () => {
-        if (Platform.OS === 'android') {
-            setAndroidStep('date');
-            setPendingDate(null);
-        } else {
-            setIosOpen(true);
-        }
-    };
-
-    const finishAndroid = (combined: Date) => {
-        let out = combined;
-        if (minimumDate && out < minimumDate) {
-            out = minimumDate;
-        }
-        onChange(formatLocalDateTime(out));
-        setAndroidStep(null);
-        setPendingDate(null);
-    };
-
-    return (
-        <View className="mb-4">
-            <Text className="text-sm font-medium text-foreground mb-2">{label}</Text>
-            <TouchableOpacity
-                onPress={openPicker}
-                className="flex-row items-center h-12 w-full rounded-md border border-input bg-background px-3"
-            >
-                <LucideCalendar size={18} color="#94a3b8" style={{ marginRight: 10 }} />
-                <Text className={value ? 'text-foreground flex-1' : 'text-muted-foreground flex-1'}>
-                    {value || 'Select date & time'}
-                </Text>
-                <LucideClock size={16} color="#94a3b8" />
-            </TouchableOpacity>
-            {error ? <Text className="text-xs text-error mt-1">{error}</Text> : null}
-
-            {Platform.OS === 'android' && androidStep === 'date' && (
-                <DateTimePicker
-                    value={date}
-                    mode="date"
-                    display="default"
-                    minimumDate={minimumDate}
-                    onChange={(e, d) => {
-                        if (e.type === 'dismissed' || !d) {
-                            setAndroidStep(null);
-                            setPendingDate(null);
-                            return;
-                        }
-                        setPendingDate(d);
-                        setAndroidStep('time');
-                    }}
-                />
-            )}
-
-            {Platform.OS === 'android' && androidStep === 'time' && pendingDate && (
-                <DateTimePicker
-                    value={mergeDateAndTime(pendingDate, parseDateTimeField(value))}
-                    mode="time"
-                    display="default"
-                    is24Hour={false}
-                    onChange={(e, d) => {
-                        if (e.type === 'dismissed' || !d) {
-                            setAndroidStep(null);
-                            setPendingDate(null);
-                            return;
-                        }
-                        const combined = mergeDateAndTime(pendingDate, d);
-                        finishAndroid(combined);
-                    }}
-                />
-            )}
-
-            {iosOpen && Platform.OS === 'ios' && (
-                <Modal transparent animationType="slide" visible={iosOpen} onRequestClose={() => setIosOpen(false)}>
-                    <TouchableWithoutFeedback onPress={() => setIosOpen(false)}>
-                        <View className="flex-1 justify-end bg-black/50">
-                            <TouchableWithoutFeedback>
-                                <View className="bg-background rounded-t-xl p-4 pb-8">
-                                    <DateTimePicker
-                                        value={date}
-                                        mode="datetime"
-                                        display="spinner"
-                                        minimumDate={minimumDate}
-                                        onChange={(_, d) => {
-                                            if (d) onChange(formatLocalDateTime(d));
-                                        }}
-                                    />
-                                    <Button label="Done" onPress={() => setIosOpen(false)} className="mt-2" />
-                                </View>
-                            </TouchableWithoutFeedback>
-                        </View>
-                    </TouchableWithoutFeedback>
-                </Modal>
-            )}
-        </View>
     );
 }
