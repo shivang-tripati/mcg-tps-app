@@ -1,12 +1,11 @@
-// hooks/use-permits.ts - FULLY FIXED WITH TYPE SAFETY
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Platform } from 'react-native';
 import { api, UPLOAD_FILE_PATH } from '../lib/api';
-import type { CreatePermitInput } from '../schemas/index';
+import type { CreatePermitInput, SubmitPermitInput } from '../schemas/index';
 import { ApiResponse } from '../types/api';
 import Toast from 'react-native-toast-message';
 import { AxiosError } from 'axios';
+import { PermitDetail, QRCodeData } from '../types/permits';
 
 // ✅ Type guard to check if error is AxiosError
 function isAxiosError(error: unknown): error is AxiosError {
@@ -145,10 +144,75 @@ interface UsePermitsParams {
     search?: string;
 }
 
+
+
+export type PermitFieldErrors = Partial<Record<keyof CreatePermitInput, string | string[]>>;
+
+export class PermitApiError extends Error {
+    readonly fieldErrors: PermitFieldErrors;
+    readonly status?: number;
+
+    constructor(message: string, fieldErrors: PermitFieldErrors = {}, status?: number) {
+        super(message);
+        this.name = 'PermitApiError';
+        this.fieldErrors = fieldErrors;
+        this.status = status;
+        Object.setPrototypeOf(this, PermitApiError.prototype);
+    }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function extractPermitFieldErrors(responseData: unknown): PermitFieldErrors {
+    if (!isRecord(responseData)) return {};
+
+    const errorObject = isRecord(responseData.error) ? responseData.error : undefined;
+    const candidates: unknown[] = [
+        errorObject?.fieldErrors,
+        errorObject?.details,
+        errorObject?.errors,
+        responseData.fieldErrors,
+        responseData.details,
+        responseData.errors,
+    ];
+
+    for (const candidate of candidates) {
+        if (!isRecord(candidate)) continue;
+
+        const result: PermitFieldErrors = {};
+        for (const [field, rawValue] of Object.entries(candidate)) {
+            if (typeof rawValue === 'string') {
+                result[field as keyof CreatePermitInput] = rawValue;
+                continue;
+            }
+
+            if (Array.isArray(rawValue)) {
+                const messages = rawValue.filter(
+                    (entry): entry is string => typeof entry === 'string' && entry.trim().length > 0
+                );
+                if (messages.length > 0) {
+                    result[field as keyof CreatePermitInput] = messages;
+                }
+            }
+        }
+
+        if (Object.keys(result).length > 0) return result;
+    }
+
+    return {};
+}
+
 export function usePermits(params: UsePermitsParams = {}) {
+    console.log('🔵 [usePermits] Hook called with params:', JSON.stringify(params, null, 2));
+    
     return useQuery({
         queryKey: ['permits', params],
         queryFn: async () => {
+            console.log('🔄 [usePermits] QueryFn executing...');
+            console.log('🔄 [usePermits] API Base URL:', api.defaults.baseURL);
+            
             try {
                 const searchParams = new URLSearchParams();
                 if (params.page) searchParams.set('page', params.page.toString());
@@ -156,48 +220,74 @@ export function usePermits(params: UsePermitsParams = {}) {
                 if (params.status) searchParams.set('status', params.status);
                 if (params.search) searchParams.set('search', params.search);
 
+                const url = `/permits?${searchParams.toString()}`;
+                console.log('📡 [usePermits] Full URL:', `${api.defaults.baseURL}${url}`);
+                console.log('📡 [usePermits] Headers:', {
+                    Authorization: api.defaults.headers.common['Authorization'] ? 'Bearer [TOKEN]' : 'None',
+                    'X-Client-Type': api.defaults.headers.common['X-Client-Type'],
+                });
+                
+                const startTime = Date.now();
                 const response = await api.get<ApiResponse<Permit[]>>(
-                    `/permits?${searchParams.toString()}`,
+                    url,
                     { timeout: 15000 }
                 );
+                const duration = Date.now() - startTime;
+                
+                console.log(`✅ [usePermits] API call completed in ${duration}ms`);
+                console.log('📊 [usePermits] Response status:', response.status);
+                console.log('📊 [usePermits] Response data:', {
+                    success: response.data.success,
+                    count: response.data.data?.length ?? 0,
+                    hasData: !!response.data.data,
+                });
                 
                 return response.data;
             } catch (error: unknown) {
-                console.error('Permits API Error:', error);
+                console.error('❌ [usePermits] API call failed at:', new Date().toISOString());
+                console.error('❌ [usePermits] Full error:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
                 
                 if (isAxiosError(error)) {
-                    if (isNetworkError(error)) {
-                        throw new Error('Unable to connect to the server. Please check your network.');
-                    }
-                    
-                    const status = error.response?.status;
-                    if (status === 401) {
-                        throw new Error('Your session has expired. Please log in again.');
-                    }
-                    if (status === 403) {
-                        throw new Error('You do not have permission to view permits.');
-                    }
-                    if (status === 500) {
-                        throw new Error('Server error. Please try again later.');
-                    }
-                    if (status === 429) {
-                        throw new Error('Too many requests. Please try again later.');
-                    }
+                    console.error('❌ [usePermits] Axios error details:', {
+                        code: error.code,
+                        message: error.message,
+                        status: error.response?.status,
+                        statusText: error.response?.statusText,
+                        data: error.response?.data,
+                        config: {
+                            url: error.config?.url,
+                            method: error.config?.method,
+                            baseURL: error.config?.baseURL,
+                            timeout: error.config?.timeout,
+                            headers: error.config?.headers,
+                        },
+                    });
                 }
                 
-                throw new Error(getErrorMessage(error));
+                throw error;
             }
         },
         retry: (failureCount, error) => {
+            console.log(`🔄 [usePermits] Retry attempt ${failureCount + 1}`);
+            console.log('🔄 [usePermits] Error:', {
+                isAxiosError: isAxiosError(error),
+                message: error instanceof Error ? error.message : 'Unknown error',
+            });
+            
             if (isAxiosError(error)) {
                 const status = error.response?.status;
                 if (status === 401 || status === 403 || status === 404) {
+                    console.log('❌ [usePermits] Not retrying on status:', status);
                     return false;
                 }
             }
             return failureCount < 3;
         },
-        retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
+        retryDelay: (attemptIndex) => {
+            const delay = Math.min(1000 * 2 ** attemptIndex, 30000);
+            console.log(`⏳ [usePermits] Retry delay: ${delay}ms`);
+            return delay;
+        },
         staleTime: 30000,
         gcTime: 300000,
         refetchOnWindowFocus: true,
@@ -205,48 +295,76 @@ export function usePermits(params: UsePermitsParams = {}) {
     });
 }
 
-export function usePermit(id: string) {
-    return useQuery({
-        queryKey: ['permit', id],
-        queryFn: async () => {
-            try {
-                const response = await api.get<ApiResponse<Permit>>(`/permits/${id}`);
-                return response.data;
-            } catch (error: unknown) {
-                console.error('Permit Detail API Error:', error);
-                
-                if (isAxiosError(error)) {
-                    if (isNetworkError(error)) {
-                        throw new Error('Unable to connect to the server.');
-                    }
-                    
-                    const status = error.response?.status;
-                    if (status === 404) {
-                        throw new Error('Permit not found.');
-                    }
-                    if (status === 401) {
-                        throw new Error('Your session has expired. Please log in again.');
-                    }
-                    if (status === 403) {
-                        throw new Error('You do not have permission to view this permit.');
-                    }
-                }
-                
-                throw new Error(getErrorMessage(error));
-            }
-        },
-        enabled: !!id,
-        retry: 2,
-        retryDelay: 1000,
-        staleTime: 60000,
-    });
+export function usePermit(id?: string) {
+  return useQuery<ApiResponse<PermitDetail>, Error>({
+    queryKey: ['permit', id],
+    enabled: !!id,
+    retry: 2,
+    retryDelay: 1000,
+    staleTime: 60000,
+    queryFn: async () => {
+      try {
+        const response = await api.get<ApiResponse<PermitDetail>>(`/permits/${id}`);
+        return response.data;
+      } catch (error: unknown) {
+        console.error('Permit Detail API Error:', error);
+
+        if (isAxiosError(error)) {
+          if (isNetworkError(error)) {
+            throw new Error('Unable to connect to the server. Please check your internet connection.');
+          }
+
+          const status = error.response?.status;
+
+          if (status === 404) {
+            throw new Error('Permit not found.');
+          }
+
+          if (status === 401) {
+            throw new Error('Your session has expired. Please log in again.');
+          }
+
+          if (status === 403) {
+            throw new Error('You do not have permission to view this permit.');
+          }
+        }
+
+        throw new Error(getErrorMessage(error));
+      }
+    },
+  });
+}
+
+
+export function usePermitQRCode(id?: string, enabled = false) {
+  return useQuery<ApiResponse<QRCodeData>, Error>({
+    queryKey: ['permit-qrcode', id],
+    enabled: !!id && enabled,
+    staleTime: 60000,
+    retry: 1,
+    queryFn: async () => {
+      try {
+        const response = await api.get<ApiResponse<QRCodeData>>(`/permits/${id}/qrcode`);
+        return response.data;
+      } catch (error: unknown) {
+        console.error('Permit QR API Error:', error);
+        throw new Error(getErrorMessage(error));
+      }
+    },
+  });
 }
 
 export function useCreatePermit() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ data, mode }: { data: CreatePermitInput; mode?: 'draft' | 'submit' }) => {
+        mutationFn: async ({
+            data,
+            mode,
+        }: {
+            data: CreatePermitInput;
+            mode?: 'draft' | 'submit';
+        }) => {
             try {
                 const response = await api.post<ApiResponse<Permit>>(
                     `/permits?mode=${mode || 'submit'}`,
@@ -255,55 +373,163 @@ export function useCreatePermit() {
                 );
                 return response.data;
             } catch (error: unknown) {
-                console.error('Create Permit Error:', error);
-                
                 if (isAxiosError(error)) {
                     if (isNetworkError(error)) {
-                        throw new Error('Network error. Please check your connection.');
+                        throw new PermitApiError(
+                            'Unable to connect to the server. Check your internet connection.'
+                        );
                     }
-                    
+
                     const status = error.response?.status;
+                    const responseData = error.response?.data;
+
                     if (status === 400) {
-                        const responseData = error.response?.data;
-                        // ✅ Safely check for error messages
-                        const message = 
-                            (responseData as any)?.error?.message || 
-                            (responseData as any)?.message || 
-                            'Invalid permit data';
-                        throw new Error(message);
+                        const fieldErrors = extractPermitFieldErrors(responseData);
+                        const message =
+                            (responseData as any)?.error?.message ||
+                            (responseData as any)?.message ||
+                            'Please correct the invalid permit details.';
+
+                        throw new PermitApiError(message, fieldErrors, status);
                     }
+
                     if (status === 401) {
-                        throw new Error('Your session has expired. Please log in again.');
+                        throw new PermitApiError(
+                            'Your session has expired. Please log in again.',
+                            {},
+                            status
+                        );
                     }
+
                     if (status === 403) {
-                        throw new Error('You do not have permission to create permits.');
+                        throw new PermitApiError(
+                            'You do not have permission to create permits.',
+                            {},
+                            status
+                        );
+                    }
+
+                    if (status === 404) {
+                        throw new PermitApiError(
+                            'The selected project or plant could not be found.',
+                            {},
+                            status
+                        );
                     }
                 }
-                
-                throw new Error(getErrorMessage(error));
+
+                throw new PermitApiError(getErrorMessage(error));
             }
         },
-        onSuccess: (data) => {
+        onSuccess: () => {
+            // Do not show a success toast here. The screen still has to upload
+            // evidence, so it should display success only after the whole flow ends.
             queryClient.invalidateQueries({ queryKey: ['permits'] });
-            Toast.show({
-                type: 'success',
-                text1: 'Permit Created',
-                text2: data?.data?.permitNumber 
-                    ? `Permit ${data.data.permitNumber} created successfully`
-                    : 'Permit created successfully',
-                position: 'top',
-                visibilityTime: 3000,
-                autoHide: true,
-            });
         },
-        onError: (error: Error) => {
+        onError: (error: PermitApiError) => {
+            // Field-level errors are rendered beside their inputs by the screen.
+            if (Object.keys(error.fieldErrors || {}).length > 0) return;
+
             Toast.show({
                 type: 'error',
-                text1: 'Create Permit Failed',
-                text2: error.message || 'Could not create permit. Please try again.',
+                text1: 'Could not create permit',
+                text2: error.message,
                 position: 'top',
                 visibilityTime: 4000,
                 autoHide: true,
+            });
+        },
+    });
+}
+
+
+interface SubmitPermitVariables {
+    permitId: string;
+    data: SubmitPermitInput;
+}
+
+export function useSubmitPermit() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({
+            permitId,
+            data,
+        }: SubmitPermitVariables) => {
+            try {
+                const response = await api.post<ApiResponse<Permit>>(
+                    `/permits/${permitId}/submit`,
+                    data,
+                    { timeout: 20000 }
+                );
+
+                if (!response.data.success || !response.data.data) {
+                    const message =
+                        (response.data as any)?.error?.message ||
+                        (response.data as any)?.message ||
+                        'Failed to submit permit';
+
+                    throw new PermitApiError(message);
+                }
+
+                return response.data;
+            } catch (error: unknown) {
+                if (error instanceof PermitApiError) {
+                    throw error;
+                }
+
+                if (isAxiosError(error)) {
+                    if (isNetworkError(error)) {
+                        throw new PermitApiError(
+                            'Unable to connect while submitting the permit. Check your internet connection.'
+                        );
+                    }
+
+                    const status = error.response?.status;
+                    const responseData = error.response?.data;
+
+                    if (status === 400) {
+                        const fieldErrors = extractPermitFieldErrors(responseData);
+                        const message =
+                            (responseData as any)?.error?.message ||
+                            (responseData as any)?.message ||
+                            'Please correct the invalid submission details.';
+
+                        throw new PermitApiError(message, fieldErrors, status);
+                    }
+
+                    if (status === 401) {
+                        throw new PermitApiError(
+                            'Your session has expired. Please log in again.',
+                            {},
+                            status
+                        );
+                    }
+
+                    if (status === 403) {
+                        throw new PermitApiError(
+                            'You do not have permission to submit this permit.',
+                            {},
+                            status
+                        );
+                    }
+
+                    if (status === 404) {
+                        throw new PermitApiError(
+                            'The permit could not be found.',
+                            {},
+                            status
+                        );
+                    }
+                }
+
+                throw new PermitApiError(getErrorMessage(error));
+            }
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['permits'] });
+            queryClient.invalidateQueries({
+                queryKey: ['permit', variables.permitId],
             });
         },
     });
@@ -410,14 +636,6 @@ export function useUploadPermitWasteEvidence() {
         onSuccess: (_, { permitId }) => {
             queryClient.invalidateQueries({ queryKey: ['permits'] });
             queryClient.invalidateQueries({ queryKey: ['permit', permitId] });
-            Toast.show({
-                type: 'success',
-                text1: 'Evidence Uploaded',
-                text2: 'Waste evidence uploaded successfully',
-                position: 'top',
-                visibilityTime: 3000,
-                autoHide: true,
-            });
         },
         onError: (error: Error) => {
             Toast.show({

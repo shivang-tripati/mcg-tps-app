@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { LucideHome, LucideFileText, LucideUser, LucideScan } from 'lucide-react-native';
+import { LucideHome, LucideFileText, LucideUser, LucideScan, LucideScale } from 'lucide-react-native';
 
 export default function TabsLayout() {
     return (
@@ -13,6 +13,14 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
+                name="scan"
+                options={{
+                    title: 'Scan',
+                    headerShown: false,
+                    tabBarIcon: ({ color }) => <LucideScan size={24} color={color} />,
+                }}
+            />
+            <Tabs.Screen
                 name="permits"
                 options={{
                     title: 'Permits',
@@ -21,11 +29,13 @@ export default function TabsLayout() {
                 }}
             />
             <Tabs.Screen
-                name="scan"
+                name="weighments"
                 options={{
-                    title: 'Scan',
+                    title: 'Weighments',
                     headerShown: false,
-                    tabBarIcon: ({ color }) => <LucideScan size={24} color={color} />,
+                    tabBarIcon: ({ color, size }) => (
+                        <LucideScale color={color} size={size} />
+                    ),
                 }}
             />
             <Tabs.Screen

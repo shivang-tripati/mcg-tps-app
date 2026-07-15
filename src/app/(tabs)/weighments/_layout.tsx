@@ -1,26 +1,25 @@
 import { Stack } from 'expo-router';
 
-export default function PermitsAdminLayout() {
+export default function WeighmentLayout() {
+    console.log('🏗️ [WeighmentLayout] Rendering');    
     return (
         <Stack
             screenOptions={{
-                headerStyle: { backgroundColor: 'hsl(325 45% 32%)' },
-                headerTintColor: 'white',
-                headerBackTitle: 'Back',
-                headerShown: true,
+                headerShown: false,
             }}
         >
             <Stack.Screen
                 name="index"
                 options={{
-                    title: 'Manage Permits',
+                    title: 'Weighments',
                     headerShown: false,
                 }}
             />
+            
             <Stack.Screen
                 name="[id]"
                 options={{
-                    title: 'Permit Details',
+                    title: 'Weighment Details',
                     headerShown: false,
                 }}
             />

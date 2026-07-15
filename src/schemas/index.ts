@@ -137,88 +137,250 @@ export const updatePlantSchema = createPlantSchema.partial().omit({ code: true }
 // PERMIT SCHEMAS
 // ============================================================
 
-const dateTimeField = (label: string) =>
+const emptyStringToUndefined = (value: unknown) => {
+    if (typeof value !== 'string') return value;
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? undefined : trimmed;
+};
+
+const optionalText = z.preprocess(
+    emptyStringToUndefined,
+    z.string().trim().optional()
+);
+
+const optionalUuid = (message: string) =>
+    z.preprocess(
+        emptyStringToUndefined,
+        z.string().uuid(message).optional()
+    );
+
+const optionalPositiveNumber = (label: string) =>
+    z.preprocess(
+        (value) => {
+            if (value === '' || value === null || value === undefined) return undefined;
+            if (typeof value === 'string') {
+                const normalized = value.replace(/,/g, '').trim();
+                if (!normalized) return undefined;
+                return Number(normalized);
+            }
+            return value;
+        },
+        z
+            // Use 'message' or 'error' instead of 'invalid_type_error'
+            .number({ message: `${label} must be a number` }) 
+            .finite(`${label} must be a valid number`)
+            .positive(`${label} must be greater than 0`)
+            .optional()
+    );
+
+const isValidDateTime = (value: string): boolean => {
+    // HTML datetime-local value.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(value)) {
+        return !Number.isNaN(new Date(value).getTime());
+    }
+
+    // ISO date-time value, including timezone/Z.
+    return !Number.isNaN(new Date(value).getTime());
+};
+
+const optionalDateTimeField = (label: string) =>
+    z.preprocess(
+        emptyStringToUndefined,
+        z
+            .string()
+            .refine(isValidDateTime, { message: `Please select a valid ${label}` })
+            .optional()
+    );
+
+const requiredDateTimeField = (label: string) =>
     z
         .string()
-        .optional()
-        .refine(
-            (val) => {
-                if (!val) return true;
+        .min(1, `${label} is required`)
+        .refine(isValidDateTime, { message: `Please select a valid ${label}` });
 
-                // Accept HTML datetime-local
-                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(val)) return true;
+const optionalIndianMobile = z.preprocess(
+    emptyStringToUndefined,
+    z.string().regex(indianMobileRegex, indianMobileMessage).optional()
+);
 
-                // Accept ISO
-                const d = new Date(val);
-                return !isNaN(d.getTime());
-            },
-            { message: `Please select a valid ${label}` }
-        );
+const requiredIndianMobile = z
+    .string()
+    .trim()
+    .min(1, 'Driver phone number is required')
+    .regex(indianMobileRegex, indianMobileMessage);
+
+const drivingLicenseRegex = /^([A-Z]{2})(\d{2}|\d{3})[A-Z]{0,1}(\d{4})(\d{7})$/i;
+const drivingLicenseMessage =
+    'Enter a valid driving licence number, for example DL0420110012345';
+
+const optionalDrivingLicense = z.preprocess(
+    emptyStringToUndefined,
+    z.string().trim().toUpperCase().regex(drivingLicenseRegex, drivingLicenseMessage).optional()
+);
 
 
-
-export const createPermitSchema = z.object({
+const permitCreateShape = {
     wasteType: z.enum(WasteType),
 
-    estimatedWeight: z.number().positive().optional(),
-    estimatedVolume: z.number().positive().optional(),
-    wasteDescription: z.string().optional(),
+    estimatedWeight: optionalPositiveNumber('Estimated weight'),
+    estimatedVolume: optionalPositiveNumber('Estimated volume'),
+    wasteDescription: optionalText,
 
-    projectId: z.string().uuid().optional(),
-    companyId: z.string().uuid().optional(),
-    plantId: z.string().uuid("Please select a destination plant"),
+    projectId: optionalUuid('Invalid project'),
+    companyId: optionalUuid('Invalid company'),
+    plantId: z
+        .string()
+        .min(1, 'Please select a destination plant')
+        .uuid('Please select a valid destination plant'),
 
-    pickupAddress: z.string().min(5, "Pickup address is required"),
-    pickupCity: z.string().min(2, "Pickup city is required"),
-    pickupState: z.string().min(2, "Pickup state is required"),
-    pickupPincode: z.string().regex(/^\d{6}$/, "Enter a valid 6-digit PIN code"),
+    pickupAddress: z
+        .string()
+        .trim()
+        .min(5, 'Pickup address must be at least 5 characters'),
+    pickupCity: z
+        .string()
+        .trim()
+        .min(2, 'Pickup city must be at least 2 characters'),
+    pickupState: z
+        .string()
+        .trim()
+        .min(2, 'Pickup state must be at least 2 characters'),
+    pickupPincode: z
+        .string()
+        .trim()
+        .regex(/^\d{6}$/, 'Enter a valid 6-digit PIN code'),
     pickupLatitude: z.number().min(-90).max(90).optional(),
     pickupLongitude: z.number().min(-180).max(180).optional(),
 
-    driverName: z.string().optional(),
-    driverPhone: z.string().regex(indianMobileRegex, indianMobileMessage).optional(),
-    vehicleNumber: z.string().optional(),
-    vehicleType: z.string().optional(),
-    licenseNumber: z
-    .string()
-    .regex(
-        /^([A-Z]{2})(\d{2}|\d{3})[A-Z]{0,1}(\d{4})(\d{7})$/i,
-        "Enter correct driving license number of the driver."
-    )
-    .optional()
-    .or(z.literal('')),
-    validFrom: dateTimeField("Start date & time"),
-    validUntil: dateTimeField("End date & time"),
+    driverName: optionalText,
+    driverPhone: optionalIndianMobile,
+    vehicleNumber: z.preprocess(
+        emptyStringToUndefined,
+        z.string().trim().toUpperCase().optional()
+    ),
+    vehicleType: optionalText,
+    licenseNumber: optionalDrivingLicense,
 
-});
+    validFrom: optionalDateTimeField('start date and time'),
+    validUntil: optionalDateTimeField('permit expiry date and time'),
+};
 
-export const updatePermitSchema = createPermitSchema.partial();
+const validatePermitDateRange = (
+    data: { validFrom?: string; validUntil?: string },
+    ctx: z.RefinementCtx
+) => {
+    if (!data.validFrom || !data.validUntil) return;
+
+    const from = new Date(data.validFrom);
+    const until = new Date(data.validUntil);
+
+    if (until.getTime() <= from.getTime()) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['validUntil'],
+            message: 'Permit expiry must be after the valid-from date and time',
+        });
+    }
+};
+
+const createPermitObjectSchema = z.object(permitCreateShape);
+
+/**
+ * Matches the current POST /api/v1/permits create contract.
+ * Driver/vehicle fields and dates are optional for drafts.
+ */
+export const createPermitSchema = createPermitObjectSchema.superRefine(
+    validatePermitDateRange
+);
+
+/**
+ * Use this when mode=submit so the frontend and backend enforce the same
+ * transport fields that the web form presents as required.
+ * Dates remain optional because they are normally set/confirmed during approval.
+ */
+export const submitCreatePermitSchema = z
+    .object({
+        ...permitCreateShape,
+        driverName: z.string().trim().min(2, 'Driver name is required'),
+        driverPhone: requiredIndianMobile,
+        vehicleNumber: z
+            .string()
+            .trim()
+            .toUpperCase()
+            .min(4, 'Vehicle registration number is required'),
+        vehicleType: z.string().trim().min(2, 'Vehicle type is required'),
+        licenseNumber: z
+            .string()
+            .trim()
+            .toUpperCase()
+            .regex(drivingLicenseRegex, drivingLicenseMessage),
+    })
+    .superRefine(validatePermitDateRange);
+
+export const updatePermitSchema = createPermitObjectSchema
+    .partial()
+    .superRefine(validatePermitDateRange);
 
 export const submitPermitSchema = z.object({
-    driverName: z.string().min(2, 'Driver name is required'),
-    driverPhone: z.string().regex(indianMobileRegex, indianMobileMessage),
-    vehicleNumber: z.string().min(4, 'Vehicle number is required'),
-    vehicleType: z.string().optional(),
-    licenseNumber: z
-    .string()
-    .regex(
-        /^([A-Z]{2})(\d{2}|\d{3})[A-Z]{0,1}(\d{4})(\d{7})$/i,
-        "License must be like: DL0420110012345 (2 letters + 2-3 digits + optional letter + 4 digits year + 7 digits number)"
-    ).optional(),
+    driverName: z.string().trim().min(2, 'Driver name is required'),
+    driverPhone: requiredIndianMobile,
+    vehicleNumber: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .min(4, 'Vehicle registration number is required'),
+    vehicleType: z.preprocess(
+        emptyStringToUndefined,
+        z.string().trim().optional()
+    ),
+    licenseNumber: z.preprocess(
+        emptyStringToUndefined,
+        z.string().trim().toUpperCase().regex(drivingLicenseRegex, drivingLicenseMessage).optional()
+    ),
 });
 
-export const approvePermitSchema = z.object({
-    validFrom: dateTimeField("Valid from").refine(val => val !== null, "Valid from is required"),
-    validUntil: dateTimeField("Permit expiry time").refine(val => val !== null, "Permit expiry time is required"),
-});
+export const approvePermitSchema = z
+    .object({
+        validFrom: requiredDateTimeField('Valid from'),
+        validUntil: requiredDateTimeField('Permit expiry time'),
+    })
+    .superRefine(validatePermitDateRange);
 
 export const rejectPermitSchema = z.object({
-    reason: z.string().min(10, 'Rejection reason must be at least 10 characters'),
+    reason: z.string().trim().min(10, 'Rejection reason must be at least 10 characters'),
 });
 
 export const cancelPermitSchema = z.object({
-    reason: z.string().min(10, 'Cancellation reason must be at least 10 characters'),
+    reason: z.string().trim().min(10, 'Cancellation reason must be at least 10 characters'),
 });
+
+export const createWasteEvidenceSchema = z.object({
+    permitId: z.string().uuid('Invalid permit ID'),
+    fileName: z.string().trim().min(1, 'File name is required'),
+    filePath: z.string().trim().min(1, 'File path is required'),
+    fileSize: z.number().positive('File size must be greater than 0'),
+    mimeType: z.string().trim().min(1, 'MIME type is required'),
+    description: optionalText,
+    capturedAt: z.string().datetime().optional(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+});
+
+/**
+ * TextInput values are strings while the API output uses numbers.
+ * The Zod preprocessors convert these safely during validation.
+ */
+export type CreatePermitFormValues = Omit<
+    CreatePermitInput,
+    'estimatedWeight' | 'estimatedVolume'
+> & {
+    estimatedWeight?: string;
+    estimatedVolume?: string;
+};
+
+
+
+
 
 // ============================================================
 // WEIGHMENT SCHEMAS
@@ -257,21 +419,7 @@ export const rejectWeighmentSchema = z.object({
     reason: z.string().min(10, 'Rejection reason must be at least 10 characters'),
 });
 
-// ============================================================
-// WASTE EVIDENCE SCHEMAS
-// ============================================================
 
-export const createWasteEvidenceSchema = z.object({
-    permitId: z.string().uuid('Invalid permit ID'),
-    fileName: z.string().min(1),
-    filePath: z.string().min(1),
-    fileSize: z.number().positive(),
-    mimeType: z.string(),
-    description: z.string().optional(),
-    capturedAt: z.string().datetime().optional(),
-    latitude: z.number().min(-90).max(90).optional(),
-    longitude: z.number().min(-180).max(180).optional(),
-});
 
 // ============================================================
 // IDENTITY DOCUMENT SCHEMAS

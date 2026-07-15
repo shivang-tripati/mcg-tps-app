@@ -14,9 +14,7 @@ export interface OnboardingState {
     hasCompany: boolean;
     companyId: string | null;
     hasProject: boolean;
-    /** Cache the projects data to avoid repeated API calls */
     cachedProjects: any[] | null;
-    /** Last successful check timestamp */
     lastCheckedAt: number | null;
 
     checkOnboardingStatus: (user: { role: string; companyId?: string | null }) => Promise<void>;
@@ -26,8 +24,9 @@ export interface OnboardingState {
     setCompanyCreated: (companyId: string) => void;
     setProjectCreated: () => void;
     reset: () => void;
-    /** Force refresh onboarding status */
     refreshStatus: (user: { role: string; companyId?: string | null }) => Promise<void>;
+    // ✅ Add a callback for when onboarding fails
+    onOnboardingError?: (error: Error) => void;
 }
 
 export const useOnboarding = create<OnboardingState>()(
@@ -46,8 +45,6 @@ export const useOnboarding = create<OnboardingState>()(
             cachedProjects: null,
             lastCheckedAt: null,
 
-            // ✅ Define the handler methods as regular functions (not arrow functions)
-            // This avoids 'this' binding issues
             handleIndividualOnboarding: async () => {
                 console.log('Checking INDIVIDUAL onboarding');
                 try {
@@ -75,83 +72,83 @@ export const useOnboarding = create<OnboardingState>()(
                     });
                 } catch (error) {
                     console.error('Individual onboarding check failed:', error);
-                    // ✅ Don't set checked to true on error - allow retry
                     set({ isChecking: false });
+                    
+                    // ✅ Call error callback if set
+                    const onError = get().onOnboardingError;
+                    if (onError) {
+                        onError(error as Error);
+                    }
+                    
                     throw error;
                 }
             },
 
             handleCompanyOnboarding: async (user: { role: string; companyId?: string | null }) => {
-    const hasCompany = !!user.companyId;
-    console.log('Has company:', hasCompany, 'Company ID:', user.companyId);
-    
-    let hasProject = false;
-    let projects: any[] = [];
+                const hasCompany = !!user.companyId;
+                console.log('Has company:', hasCompany, 'Company ID:', user.companyId);
+                
+                let hasProject = false;
+                let projects: any[] = [];
 
-    if (hasCompany) {
-        try {
-            console.log('Fetching projects with timeout...');
-            const resp = await api.get('/projects', { timeout: 5000 });
-            projects = resp.data.data || [];
-            hasProject = projects.length > 0;
-            console.log('Projects found:', projects.length);
-            
-            // ✅ Cache successful response
-            set({ cachedProjects: projects });
-        } catch (error: any) {
-            console.error('Error fetching projects:', error);
-            
-            // ✅ Check if it's a network error
-            if (isNetworkError(error)) {
-                console.log('Network error fetching projects - using cache if available');
-                const cached = get().cachedProjects;
-                if (cached !== null) {
-                    console.log('Using cached projects:', cached.length);
-                    projects = cached;
-                    hasProject = cached.length > 0;
-                } else {
-                    // ✅ If no cache and network error, mark as not onboarded but don't fail
-                    hasProject = false;
+                if (hasCompany) {
+                    try {
+                        console.log('Fetching projects with timeout...');
+                        const resp = await api.get('/projects', { timeout: 5000 });
+                        projects = resp.data.data || [];
+                        hasProject = projects.length > 0;
+                        console.log('Projects found:', projects.length);
+                        
+                        set({ cachedProjects: projects });
+                    } catch (error: any) {
+                        console.error('Error fetching projects:', error);
+                        
+                        if (isNetworkError(error)) {
+                            console.log('Network error fetching projects - using cache if available');
+                            const cached = get().cachedProjects;
+                            if (cached !== null) {
+                                console.log('Using cached projects:', cached.length);
+                                projects = cached;
+                                hasProject = cached.length > 0;
+                            } else {
+                                hasProject = false;
+                            }
+                        } else {
+                            const cached = get().cachedProjects;
+                            if (cached !== null) {
+                                console.log('Using cached projects:', cached.length);
+                                projects = cached;
+                                hasProject = cached.length > 0;
+                            } else {
+                                hasProject = false;
+                            }
+                        }
+                    }
                 }
-            } else {
-                // ✅ Use cached projects if available
-                const cached = get().cachedProjects;
-                if (cached !== null) {
-                    console.log('Using cached projects:', cached.length);
-                    projects = cached;
-                    hasProject = cached.length > 0;
-                } else {
-                    hasProject = false;
-                }
-            }
-        }
-    }
 
-    const isOnboarded = hasCompany && hasProject;
-    console.log('Company user status:', { hasCompany, hasProject, isOnboarded });
+                const isOnboarded = hasCompany && hasProject;
+                console.log('Company user status:', { hasCompany, hasProject, isOnboarded });
 
-    set({
-        checked: true,
-        isOnboarded,
-        hasCompany,
-        companyId: user.companyId || null,
-        hasProject,
-        isChecking: false,
-        lastCheckedAt: Date.now(),
-    });
-},
+                set({
+                    checked: true,
+                    isOnboarded,
+                    hasCompany,
+                    companyId: user.companyId || null,
+                    hasProject,
+                    isChecking: false,
+                    lastCheckedAt: Date.now(),
+                });
+            },
 
             checkOnboardingStatus: async (user: { role: string; companyId?: string | null }) => {
-                // ✅ Prevent duplicate checks
                 if (get().isChecking) {
                     console.log('Onboarding check already in progress');
                     return;
                 }
 
-                // ✅ Use cached data if available and recent (within 5 minutes)
                 const lastChecked = get().lastCheckedAt;
                 const cacheAge = lastChecked ? Date.now() - lastChecked : Infinity;
-                const isCacheValid = cacheAge < 5 * 60 * 1000; // 5 minutes
+                const isCacheValid = cacheAge < 5 * 60 * 1000;
 
                 if (get().checked && get().isOnboarded && isCacheValid) {
                     console.log('Using cached onboarding status');
@@ -163,13 +160,10 @@ export const useOnboarding = create<OnboardingState>()(
 
                 try {
                     if (user.role === 'INDIVIDUAL') {
-                        // ✅ Call the handler directly using the get() function
                         await get().handleIndividualOnboarding();
                     } else if (user.role === 'COMPANY_USER') {
-                        // ✅ Call the handler directly using the get() function
                         await get().handleCompanyOnboarding(user);
                     } else {
-                        // ADMIN / GUEST — skip onboarding
                         console.log('Admin or guest user - skipping onboarding');
                         set({ 
                             checked: true, 
@@ -180,8 +174,7 @@ export const useOnboarding = create<OnboardingState>()(
                     }
                 } catch (error) {
                     console.error('Onboarding check failed:', error);
-                    
-                    // ✅ On error, try to use cached data
+
                     const cachedProjects = get().cachedProjects;
                     if (cachedProjects !== null) {
                         console.log('Using cached projects data on error');
@@ -205,7 +198,6 @@ export const useOnboarding = create<OnboardingState>()(
             },
 
             refreshStatus: async (user: { role: string; companyId?: string | null }) => {
-                // Clear cache and recheck
                 set({ 
                     checked: false, 
                     isOnboarded: false,

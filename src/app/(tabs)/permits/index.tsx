@@ -27,6 +27,7 @@ import { usePermits } from '../../../hooks/use-permits';
 import { useAuth } from '../../../lib/auth-store';
 import { StatusBadge } from '../../../components/ui/status-badge';
 import { AxiosError } from 'axios';
+import { api } from '../../../lib/api';
 
 // ✅ Type guards
 function isAxiosError(error: unknown): error is AxiosError {
@@ -79,6 +80,22 @@ function getErrorMessage(error: unknown): string {
     return 'An unexpected error occurred.';
 }
 
+
+const testPermitsEndpoint = async () => {
+    try {
+        console.log('🧪 Testing /permits endpoint...');
+        const response = await api.get('/permits', { timeout: 5000 });
+        console.log('✅ /permits endpoint test successful:', {
+            status: response.status,
+            data: response.data,
+        });
+        return true;
+    } catch (error) {
+        console.error('❌ /permits endpoint test failed:', error);
+        return false;
+    }
+};
+
 const PRIMARY = 'hsl(325 45% 32%)';
 const MUTED = 'hsl(220 9% 46%)';
 
@@ -117,6 +134,11 @@ export default function PermitsScreen() {
         failureCount,
         status,
     } = usePermits({ limit: 20 });
+
+    useEffect(() => {
+    // Test the endpoint on mount
+    testPermitsEndpoint();
+}, []);
 
     // ✅ LOG: Query status changes
     useEffect(() => {

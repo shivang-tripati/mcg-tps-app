@@ -1,6 +1,8 @@
+// lib/auth-store.ts - FIXED
+
 import { create } from 'zustand';
 import { storage, AUTH_TOKEN_KEY, USER_KEY, SecureStorage, REFRESH_TOKEN_KEY } from './storage';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 
 interface User {
     id: string;
@@ -10,24 +12,32 @@ interface User {
     companyId?: string | null;
 }
 
-// lib/auth-store.ts
 interface AuthState {
     user: User | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    isNewRegistration: boolean; // Add this
+    isNewRegistration: boolean;
+    tokenValid: boolean | null;
     login: (accessToken: string, refreshToken: string, user: User) => Promise<void>;
+    loginRegular: (accessToken: string, refreshToken: string, user: User) => Promise<void>;
     logout: () => Promise<void>;
     hydrate: () => Promise<void>;
     updateUser: (user: Partial<User>) => void;
-    clearNewRegistration: () => void; // Add this
+    clearNewRegistration: () => void;
+    validateToken: () => Promise<boolean>;
+    setTokenValid: (valid: boolean) => void;
+    setLogoutInProgress: (inProgress: boolean) => void;
 }
+
+// ✅ Track logout state globally to prevent multiple redirects
+let logoutInProgress = false;
 
 export const useAuth = create<AuthState>((set, get) => ({
     user: null,
     isAuthenticated: false,
     isLoading: true,
-    isNewRegistration: false, // Initialize
+    isNewRegistration: false,
+    tokenValid: null,
 
     login: async (accessToken, refreshToken, user) => {
         try {
@@ -36,32 +46,32 @@ export const useAuth = create<AuthState>((set, get) => ({
                 return;
             }
 
-            const tokenStr = String(accessToken);
-            const refreshStr = String(refreshToken);
-            const userStr = JSON.stringify(user);
-
             await Promise.all([
-                SecureStorage.setItem(AUTH_TOKEN_KEY, tokenStr),
-                storage.set(USER_KEY, userStr),
-                SecureStorage.setItem(REFRESH_TOKEN_KEY, refreshStr)
+                SecureStorage.setItem(AUTH_TOKEN_KEY, String(accessToken)),
+                storage.set(USER_KEY, JSON.stringify(user)),
+                SecureStorage.setItem(REFRESH_TOKEN_KEY, String(refreshToken))
             ]);
 
-            // Set isNewRegistration to true when logging in from registration
-            // We'll detect this from the login call
-            set({ 
-                user, 
+            set({
+                user,
                 isAuthenticated: true,
-                isNewRegistration: true // Flag for first-time login
+                isNewRegistration: true,
+                tokenValid: true
             });
 
         } catch (error) {
             console.error("❌ Error during login storage process:", error);
+            set({
+                user: null,
+                isAuthenticated: false,
+                isLoading: false,
+                isNewRegistration: false,
+                tokenValid: false,
+            });
         }
     },
 
-    // Add this method for regular login (not from registration)
-    loginRegular: async (accessToken: string, refreshToken: string, user: User) => {
-        // Same as login but sets isNewRegistration: false
+    loginRegular: async (accessToken, refreshToken, user) => {
         try {
             if (!accessToken || !refreshToken || !user) return;
 
@@ -71,10 +81,11 @@ export const useAuth = create<AuthState>((set, get) => ({
                 SecureStorage.setItem(REFRESH_TOKEN_KEY, String(refreshToken))
             ]);
 
-            set({ 
-                user, 
+            set({
+                user,
                 isAuthenticated: true,
-                isNewRegistration: false // Not a new registration
+                isNewRegistration: false,
+                tokenValid: true
             });
         } catch (error) {
             console.error("❌ Error during login storage process:", error);
@@ -85,52 +96,190 @@ export const useAuth = create<AuthState>((set, get) => ({
         set({ isNewRegistration: false });
     },
 
+    setTokenValid: (valid: boolean) => {
+        set({ tokenValid: valid });
+    },
+
+    setLogoutInProgress: (inProgress: boolean) => {
+        logoutInProgress = inProgress;
+    },
+
     logout: async () => {
+        // ✅ Prevent multiple logout calls
+        if (logoutInProgress) {
+            return;
+        }
+
+        logoutInProgress = true;
+
         try {
-            await api_logout_safe();
-        } catch { }
+            // Clear storage
+            await SecureStorage.removeItem(AUTH_TOKEN_KEY);
+            await storage.delete(USER_KEY);
+            await SecureStorage.removeItem(REFRESH_TOKEN_KEY);
 
-        await SecureStorage.removeItem(AUTH_TOKEN_KEY);
-        await storage.delete(USER_KEY);
-        await SecureStorage.removeItem(REFRESH_TOKEN_KEY);
+            set({
+                user: null,
+                isAuthenticated: false,
+                isLoading: false,
+                isNewRegistration: false,
+                tokenValid: false,
+            });
+        } catch (error) {
+            console.error("❌ Error during logout process:", error);
+            set({
+                user: null,
+                isAuthenticated: false,
+                isNewRegistration: false,
+                tokenValid: false
+            });
+        }
 
-        set({ 
-            user: null, 
-            isAuthenticated: false,
-            isNewRegistration: false 
-        });
-        router.replace('/(auth)/login');
+        // ✅ Use a timeout to prevent navigation issues
+        setTimeout(() => {
+            try {
+                router.replace('/(auth)/login');
+            } catch (error) {
+                console.error("❌ Error during logout navigation:", error);
+            } finally {
+                logoutInProgress = false;
+            }
+        }, 100);
     },
 
     hydrate: async () => {
+        console.log('💧 Hydrating auth state...');
         try {
             const token = await SecureStorage.getItem(AUTH_TOKEN_KEY);
             const userStr = await storage.getString(USER_KEY);
 
             if (token && userStr) {
                 const user = JSON.parse(userStr);
-                set({ 
-                    user, 
-                    isAuthenticated: true, 
+                console.log('✅ Found stored auth data for user:', user.email);
+                set({
+                    user,
+                    isAuthenticated: true,
                     isLoading: false,
-                    isNewRegistration: false // Reset on hydration
+                    isNewRegistration: false,
+                    tokenValid: null
                 });
             } else {
-                set({ 
-                    user: null, 
-                    isAuthenticated: false, 
+                console.log('ℹ️ No stored auth data found');
+                set({
+                    user: null,
+                    isAuthenticated: false,
                     isLoading: false,
-                    isNewRegistration: false 
+                    isNewRegistration: false,
+                    tokenValid: false
                 });
             }
         } catch (e) {
-            console.error("Hydration failed:", e);
-            set({ 
-                user: null, 
-                isAuthenticated: false, 
+            console.error("❌ Hydration failed:", e);
+            set({
+                user: null,
+                isAuthenticated: false,
                 isLoading: false,
-                isNewRegistration: false 
+                isNewRegistration: false,
+                tokenValid: false
             });
+        }
+    },
+
+    validateToken: async () => {
+        console.log('🔍 Validating token...');
+
+        if (!get().isAuthenticated) {
+            set({ tokenValid: false });
+            return false;
+        }
+
+        try {
+            const token =
+                await SecureStorage.getItem(AUTH_TOKEN_KEY);
+
+            if (!token) {
+                console.log('❌ No access token found');
+
+                set({
+                    tokenValid: false,
+                    isAuthenticated: false,
+                    user: null,
+                });
+
+                return false;
+            }
+
+            const {
+                api,
+            } = require('./api');
+
+            const response = await api.get('/auth/me', {
+                timeout: 10000,
+            });
+
+            if (response.status >= 200 && response.status < 300) {
+                console.log('✅ Token/session is valid');
+
+                set({ tokenValid: true });
+                return true;
+            }
+
+            set({ tokenValid: false });
+            return false;
+        } catch (error: any) {
+            const {
+                isNetworkError,
+            } = require('./api');
+
+            /*
+             * Do not invalidate or remove the stored session when
+             * the backend cannot be reached.
+             */
+            if (isNetworkError(error)) {
+                console.log(
+                    '🌐 Could not validate session because the server is unreachable'
+                );
+
+                set({
+                    tokenValid: null,
+                });
+
+                return false;
+            }
+
+            const status = error?.response?.status;
+
+            if (status === 401 || status === 403) {
+                console.log(
+                    '🔴 Session is invalid or expired'
+                );
+
+                /*
+                 * The API interceptor normally handles invalid
+                 * refresh tokens and invokes the logout handler.
+                 *
+                 * Keep the in-memory status invalid here.
+                 */
+                set({
+                    tokenValid: false,
+                });
+
+                return false;
+            }
+
+            /*
+             * A backend 500/502/503 should not log the user out.
+             */
+            console.error(
+                'Token validation server error:',
+                error
+            );
+
+            set({
+                tokenValid: null,
+            });
+
+            return false;
         }
     },
 
@@ -143,14 +292,3 @@ export const useAuth = create<AuthState>((set, get) => ({
         }
     },
 }));
-
-/**
- * Safe logout API call — fire-and-forget.
- * We import api lazily to avoid circular dependency issues.
- */
-async function api_logout_safe() {
-    try {
-        const { api } = require('./api');
-        await api.post('/auth/logout');
-    } catch { }
-}

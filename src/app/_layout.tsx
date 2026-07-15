@@ -1,7 +1,7 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { View, ActivityIndicator, Text, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import NetInfo from '@react-native-community/netinfo';
@@ -10,6 +10,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import Toast from 'react-native-toast-message';
 import { queryClient } from '../lib/query-client';
 import { useAuth } from '../lib/auth-store';
+import { registerSessionInvalidHandler } from '../lib/api';
 import { useOnboarding } from '../lib/onboarding-store';
 import { UserRole } from '../types/database';
 import './../../global.css';
@@ -45,7 +46,7 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
 // ============================================================================
 export default function RootLayout() {
     // Auth state
-    const { isAuthenticated, isLoading, hydrate, user } = useAuth();
+    const { isAuthenticated, isLoading, hydrate, user, tokenValid, validateToken } = useAuth();
 
     // Onboarding state
     const {
@@ -65,6 +66,10 @@ export default function RootLayout() {
     const [appIsReady, setAppIsReady] = useState(false);
     const [isNavigating, setIsNavigating] = useState(false);
 
+    // ✅ Add ref to prevent infinite loops
+    const validationDone = useRef(false);
+    const onboardingCheckDone = useRef(false);
+
     // ==========================================================================
     // 1. APP INITIALIZATION
     // ==========================================================================
@@ -83,6 +88,19 @@ export default function RootLayout() {
         prepare();
     }, []);
 
+
+    useEffect(() => {
+    const unregister =
+        registerSessionInvalidHandler(async () => {
+            useOnboarding.getState().reset();
+            queryClient.clear();
+
+            await useAuth.getState().logout();
+        });
+
+    return unregister;
+}, []);
+
     // ==========================================================================
     // 2. NETWORK MONITORING
     // ==========================================================================
@@ -97,7 +115,6 @@ export default function RootLayout() {
             setIsOffline(!isConnected);
 
             if (!isConnected) {
-                // Show offline toast
                 Toast.show({
                     type: 'error',
                     text1: 'You are offline',
@@ -106,7 +123,6 @@ export default function RootLayout() {
                     visibilityTime: 3000,
                 });
             } else if (wasOfflineBefore) {
-                // Show back online toast
                 Toast.show({
                     type: 'success',
                     text1: 'Back online',
@@ -133,19 +149,89 @@ export default function RootLayout() {
     }, [isAuthenticated, user, checked, checkOnboardingStatus, hydrate]);
 
     // ==========================================================================
-    // 3. ONBOARDING STATUS CHECK
+    // 3. TOKEN VALIDATION
+    // ==========================================================================
+    useEffect(() => {
+        const validateTokenIfNeeded = async () => {
+            // Skip if already validated
+            if (validationDone.current) return;
+
+            // Skip if not authenticated
+            if (!isAuthenticated) {
+                validationDone.current = true;
+                return;
+            }
+
+            // Skip if still loading
+            if (isLoading) return;
+
+            console.log('🔍 Validating token...');
+            validationDone.current = true;
+
+            const isValid = await validateToken();
+
+            const currentAuthState =
+                useAuth.getState();
+
+            if (
+                !isValid &&
+                currentAuthState.tokenValid === false &&
+                currentAuthState.isAuthenticated
+            ) {
+                console.log(
+                    '❌ Session confirmed invalid'
+                );
+
+                await currentAuthState.logout();
+            }
+        };
+
+        validateTokenIfNeeded();
+    }, [isAuthenticated, isLoading, validateToken]);
+
+    // ==========================================================================
+    // 4. ONBOARDING STATUS CHECK
     // ==========================================================================
     useEffect(() => {
         const checkOnboarding = async () => {
-            if (checked) return;
+            // Skip if already checked onboarding
+            if (onboardingCheckDone.current) return;
 
+            // Skip if auth is not ready
             if (isLoading) return;
 
+            // Skip if not authenticated
             if (!isAuthenticated) return;
 
+            // Skip if token is not valid
+            if (tokenValid !== true) {
+    console.log(
+        '⏭️ Session not yet verified - skipping onboarding'
+    );
+    return;
+}
+
+if (isOffline) {
+    console.log(
+        '⏭️ Offline - skipping onboarding API check'
+    );
+    return;
+}
+
+            // Skip if already checked
+            if (checked) {
+                onboardingCheckDone.current = true;
+                return;
+            }
+
+            // Skip if checking
             if (isChecking) return;
 
+            // Skip if no user
             if (!user) return;
+
+            console.log('🔄 Starting onboarding check...');
+            onboardingCheckDone.current = true;
 
             try {
                 await checkOnboardingStatus(user);
@@ -160,6 +246,7 @@ export default function RootLayout() {
         // Reset onboarding state when user logs out
         if (!isAuthenticated && checked) {
             resetOnboarding();
+            onboardingCheckDone.current = false;
         }
     }, [
         isAuthenticated,
@@ -167,12 +254,13 @@ export default function RootLayout() {
         user,
         checked,
         isChecking,
+        tokenValid,
         checkOnboardingStatus,
         resetOnboarding
     ]);
 
     // ==========================================================================
-    // 4. DEEP LINKING
+    // 5. DEEP LINKING
     // ==========================================================================
     useEffect(() => {
         const handleDeepLink = (event: { url: string }) => {
@@ -190,7 +278,6 @@ export default function RootLayout() {
             }
 
             if (path === 'permit' && queryParams?.id) {
-                // Handle deep link to permit based on user role
                 if (user?.role === UserRole.ADMIN) {
                     router.push(`/(admin)/permits/${queryParams.id}`);
                 } else {
@@ -214,7 +301,7 @@ export default function RootLayout() {
     }, [user]);
 
     // ==========================================================================
-    // 5. NAVIGATION GUARD
+    // 6. NAVIGATION GUARD
     // ==========================================================================
     useEffect(() => {
         if (!appIsReady || isLoading || isNavigating) return;
@@ -227,7 +314,7 @@ export default function RootLayout() {
         const isLandingPage = !segments[0] || segments[0] === 'index';
         const inResetPassword = segments[0] === 'reset-password';
 
-        // ✅ PUBLIC SCREENS - Always accessible (including landing page)
+        // ✅ PUBLIC SCREENS - Always accessible
         if (isLandingPage || inVerifyScreen || inResetPassword) {
             return;
         }
@@ -271,7 +358,6 @@ export default function RootLayout() {
         }
 
         // ✅ FULLY ONBOARDED REGULAR USER
-        // Redirect auth, onboarding, and landing pages to dashboard
         if (inAuthGroup || inOnboardingGroup || isLandingPage) {
             setIsNavigating(true);
             router.replace('/(tabs)/dashboard');
@@ -279,7 +365,7 @@ export default function RootLayout() {
             return;
         }
 
-        // ✅ If regular user somehow ends up in admin group, redirect
+        // ✅ If regular user ends up in admin group
         if (inAdminGroup) {
             setIsNavigating(true);
             router.replace('/(tabs)/dashboard');
@@ -291,7 +377,6 @@ export default function RootLayout() {
         if (inTabsGroup) {
             return;
         }
-
     }, [
         appIsReady,
         isLoading,
@@ -306,7 +391,7 @@ export default function RootLayout() {
     ]);
 
     // ==========================================================================
-    // 6. LOADING SCREENS
+    // 7. LOADING SCREENS
     // ==========================================================================
     if (!appIsReady) {
         return (
@@ -326,7 +411,7 @@ export default function RootLayout() {
         );
     }
 
-    if (isAuthenticated && !checked && isChecking) {
+    if (isAuthenticated && tokenValid && !checked && isChecking) {
         return (
             <View className="flex-1 items-center justify-center bg-background">
                 <ActivityIndicator size="large" color="#8F1D3F" />
@@ -336,7 +421,7 @@ export default function RootLayout() {
     }
 
     // ==========================================================================
-    // 7. MAIN APP RENDER
+    // 8. MAIN APP RENDER
     // ==========================================================================
     return (
         <SafeAreaProvider>
