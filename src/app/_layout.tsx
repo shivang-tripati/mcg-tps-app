@@ -66,8 +66,8 @@ export default function RootLayout() {
     const [appIsReady, setAppIsReady] = useState(false);
     const [isNavigating, setIsNavigating] = useState(false);
 
-    // ✅ Add ref to prevent infinite loops
-    const validationDone = useRef(false);
+    // Refs to prevent infinite loops
+    const validationStarted = useRef(false);
     const onboardingCheckDone = useRef(false);
 
     // ==========================================================================
@@ -86,23 +86,23 @@ export default function RootLayout() {
         };
 
         prepare();
-    }, []);
+    }, [hydrate]);
 
-
+    // ==========================================================================
+    // 2. SESSION INVALIDATION HANDLER
+    // ==========================================================================
     useEffect(() => {
-    const unregister =
-        registerSessionInvalidHandler(async () => {
+        const unregister = registerSessionInvalidHandler(async () => {
             useOnboarding.getState().reset();
             queryClient.clear();
-
             await useAuth.getState().logout();
         });
 
-    return unregister;
-}, []);
+        return unregister;
+    }, []);
 
     // ==========================================================================
-    // 2. NETWORK MONITORING
+    // 3. NETWORK MONITORING
     // ==========================================================================
     useEffect(() => {
         let wasOffline = false;
@@ -149,53 +149,74 @@ export default function RootLayout() {
     }, [isAuthenticated, user, checked, checkOnboardingStatus, hydrate]);
 
     // ==========================================================================
-    // 3. TOKEN VALIDATION
+    // 4. TOKEN VALIDATION - FIXED
     // ==========================================================================
     useEffect(() => {
         const validateTokenIfNeeded = async () => {
-            // Skip if already validated
-            if (validationDone.current) return;
+            // Skip if validation already started
+            if (validationStarted.current) {
+                console.log('⏭️ Validation already started, skipping...');
+                return;
+            }
 
             // Skip if not authenticated
             if (!isAuthenticated) {
-                validationDone.current = true;
+                console.log('⏭️ Not authenticated, skipping validation');
                 return;
             }
 
             // Skip if still loading
-            if (isLoading) return;
+            if (isLoading) {
+                console.log('⏭️ Still loading, skipping validation');
+                return;
+            }
 
-            console.log('🔍 Validating token...');
-            validationDone.current = true;
+            // Skip if already validated
+            if (tokenValid !== null) {
+                console.log(`⏭️ Already validated: tokenValid=${tokenValid}`);
+                return;
+            }
 
-            const isValid = await validateToken();
+            console.log('🔍 Starting token validation...');
+            validationStarted.current = true;
 
-            const currentAuthState =
-                useAuth.getState();
+            try {
+                const isValid = await validateToken();
+                console.log(`✅ Token validation completed: ${isValid}`);
 
-            if (
-                !isValid &&
-                currentAuthState.tokenValid === false &&
-                currentAuthState.isAuthenticated
-            ) {
-                console.log(
-                    '❌ Session confirmed invalid'
-                );
-
-                await currentAuthState.logout();
+                if (isValid) {
+                    console.log('✅ Token validated successfully - triggering onboarding check');
+                    // Trigger onboarding check
+                    onboardingCheckDone.current = false;
+                    const { user } = useAuth.getState();
+                    if (user) {
+                        useOnboarding.getState().checkOnboardingStatus(user);
+                    }
+                } else {
+                    console.log('❌ Token validation failed');
+                    // If token is invalid, logout
+                    await useAuth.getState().logout();
+                }
+            } catch (error) {
+                console.error('❌ Token validation error:', error);
+                // On error, try to logout to clear potentially invalid state
+                await useAuth.getState().logout();
             }
         };
 
         validateTokenIfNeeded();
-    }, [isAuthenticated, isLoading, validateToken]);
+    }, [isAuthenticated, isLoading, tokenValid, validateToken]);
 
     // ==========================================================================
-    // 4. ONBOARDING STATUS CHECK
+    // 5. ONBOARDING STATUS CHECK
     // ==========================================================================
     useEffect(() => {
         const checkOnboarding = async () => {
             // Skip if already checked onboarding
-            if (onboardingCheckDone.current) return;
+            if (onboardingCheckDone.current) {
+                console.log('⏭️ Onboarding already checked, skipping');
+                return;
+            }
 
             // Skip if auth is not ready
             if (isLoading) return;
@@ -203,20 +224,22 @@ export default function RootLayout() {
             // Skip if not authenticated
             if (!isAuthenticated) return;
 
+            // If token validity is unknown, wait
+            if (tokenValid === null) {
+                console.log('⏳ Token validation pending - waiting before onboarding check');
+                return;
+            }
+
             // Skip if token is not valid
             if (tokenValid !== true) {
-    console.log(
-        '⏭️ Session not yet verified - skipping onboarding'
-    );
-    return;
-}
+                console.log('⏭️ Session not valid - skipping onboarding');
+                return;
+            }
 
-if (isOffline) {
-    console.log(
-        '⏭️ Offline - skipping onboarding API check'
-    );
-    return;
-}
+            if (isOffline) {
+                console.log('⏭️ Offline - skipping onboarding API check');
+                return;
+            }
 
             // Skip if already checked
             if (checked) {
@@ -256,11 +279,12 @@ if (isOffline) {
         isChecking,
         tokenValid,
         checkOnboardingStatus,
-        resetOnboarding
+        resetOnboarding,
+        isOffline,
     ]);
 
     // ==========================================================================
-    // 5. DEEP LINKING
+    // 6. DEEP LINKING
     // ==========================================================================
     useEffect(() => {
         const handleDeepLink = (event: { url: string }) => {
@@ -301,7 +325,7 @@ if (isOffline) {
     }, [user]);
 
     // ==========================================================================
-    // 6. NAVIGATION GUARD
+    // 7. NAVIGATION GUARD
     // ==========================================================================
     useEffect(() => {
         if (!appIsReady || isLoading || isNavigating) return;
@@ -314,12 +338,12 @@ if (isOffline) {
         const isLandingPage = !segments[0] || segments[0] === 'index';
         const inResetPassword = segments[0] === 'reset-password';
 
-        // ✅ PUBLIC SCREENS - Always accessible
+        // PUBLIC SCREENS - Always accessible
         if (isLandingPage || inVerifyScreen || inResetPassword) {
             return;
         }
 
-        // ✅ NOT AUTHENTICATED - Redirect to login
+        // NOT AUTHENTICATED - Redirect to login
         if (!isAuthenticated) {
             if (!inAuthGroup) {
                 setIsNavigating(true);
@@ -329,12 +353,25 @@ if (isOffline) {
             return;
         }
 
-        // ✅ WAIT FOR ONBOARDING CHECK
+        // If token validation is pending, wait
+        if (tokenValid === null) {
+            console.log('⏳ Waiting for token validation...');
+            return;
+        }
+
+        // Invalid token - logout
+        if (tokenValid === false) {
+            console.log('🔴 Invalid token - logging out');
+            useAuth.getState().logout();
+            return;
+        }
+
+        // WAIT FOR ONBOARDING CHECK
         if (!checked || isChecking) {
             return;
         }
 
-        // ✅ ADMIN USER
+        // ADMIN USER
         if (user?.role === UserRole.ADMIN) {
             if (!inAdminGroup) {
                 setIsNavigating(true);
@@ -344,7 +381,7 @@ if (isOffline) {
             return;
         }
 
-        // ✅ REGULAR USER - NOT ONBOARDED
+        // REGULAR USER - NOT ONBOARDED
         if (!isOnboarded) {
             if (inOnboardingGroup) return;
 
@@ -357,7 +394,7 @@ if (isOffline) {
             return;
         }
 
-        // ✅ FULLY ONBOARDED REGULAR USER
+        // FULLY ONBOARDED REGULAR USER
         if (inAuthGroup || inOnboardingGroup || isLandingPage) {
             setIsNavigating(true);
             router.replace('/(tabs)/dashboard');
@@ -365,7 +402,7 @@ if (isOffline) {
             return;
         }
 
-        // ✅ If regular user ends up in admin group
+        // If regular user ends up in admin group
         if (inAdminGroup) {
             setIsNavigating(true);
             router.replace('/(tabs)/dashboard');
@@ -373,7 +410,7 @@ if (isOffline) {
             return;
         }
 
-        // ✅ Allow access to tabs
+        // Allow access to tabs
         if (inTabsGroup) {
             return;
         }
@@ -387,12 +424,14 @@ if (isOffline) {
         checked,
         isChecking,
         isOnboarded,
+        tokenValid,
         router
     ]);
 
     // ==========================================================================
-    // 7. LOADING SCREENS
+    // 8. LOADING SCREENS
     // ==========================================================================
+
     if (!appIsReady) {
         return (
             <View className="flex-1 items-center justify-center bg-background">
@@ -411,6 +450,26 @@ if (isOffline) {
         );
     }
 
+    // Show validation loading only if validation is in progress
+    if (isAuthenticated && tokenValid === null && validationStarted.current) {
+        return (
+            <View className="flex-1 items-center justify-center bg-background">
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground text-sm">Verifying your session...</Text>
+            </View>
+        );
+    }
+
+    // If authenticated but validation hasn't started yet, show loading
+    if (isAuthenticated && tokenValid === null && !validationStarted.current) {
+        return (
+            <View className="flex-1 items-center justify-center bg-background">
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground text-sm">Initializing...</Text>
+            </View>
+        );
+    }
+
     if (isAuthenticated && tokenValid && !checked && isChecking) {
         return (
             <View className="flex-1 items-center justify-center bg-background">
@@ -421,7 +480,7 @@ if (isOffline) {
     }
 
     // ==========================================================================
-    // 8. MAIN APP RENDER
+    // 9. MAIN APP RENDER
     // ==========================================================================
     return (
         <SafeAreaProvider>

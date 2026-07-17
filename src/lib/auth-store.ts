@@ -194,31 +194,44 @@ export const useAuth = create<AuthState>((set, get) => ({
         }
 
         try {
-            const token =
-                await SecureStorage.getItem(AUTH_TOKEN_KEY);
+            const token = await SecureStorage.getItem(AUTH_TOKEN_KEY);
 
             if (!token) {
                 console.log('❌ No access token found');
-
                 set({
                     tokenValid: false,
                     isAuthenticated: false,
                     user: null,
                 });
-
                 return false;
             }
 
-            const {
-                api,
-            } = require('./api');
+            const { api } = require('./api');
 
-            const response = await api.get('/auth/me', {
+            // ✅ CORRECT ENDPOINT: /auth/validate
+            const response = await api.get('/auth/validate', {
                 timeout: 10000,
             });
 
             if (response.status >= 200 && response.status < 300) {
                 console.log('✅ Token/session is valid');
+
+                // Update user data from validation response
+                const userData = response.data?.data?.user;
+                if (userData) {
+                    const currentUser = get().user;
+                    if (currentUser) {
+                        const updatedUser = {
+                            ...currentUser,
+                            id: userData.userId || currentUser.id,
+                            email: userData.email || currentUser.email,
+                            role: userData.role || currentUser.role,
+                            companyId: userData.companyId || currentUser.companyId,
+                        };
+                        set({ user: updatedUser });
+                        await storage.set(USER_KEY, JSON.stringify(updatedUser));
+                    }
+                }
 
                 set({ tokenValid: true });
                 return true;
@@ -227,62 +240,34 @@ export const useAuth = create<AuthState>((set, get) => ({
             set({ tokenValid: false });
             return false;
         } catch (error: any) {
-            const {
-                isNetworkError,
-            } = require('./api');
+            const { isNetworkError } = require('./api');
 
-            /*
-             * Do not invalidate or remove the stored session when
-             * the backend cannot be reached.
-             */
+            // Network errors - keep token but mark as unknown
             if (isNetworkError(error)) {
-                console.log(
-                    '🌐 Could not validate session because the server is unreachable'
-                );
-
-                set({
-                    tokenValid: null,
-                });
-
+                console.log('🌐 Network error during validation - keeping session');
+                set({ tokenValid: null });
                 return false;
             }
 
             const status = error?.response?.status;
 
+            // 401/403 - invalid session
             if (status === 401 || status === 403) {
-                console.log(
-                    '🔴 Session is invalid or expired'
-                );
-
-                /*
-                 * The API interceptor normally handles invalid
-                 * refresh tokens and invokes the logout handler.
-                 *
-                 * Keep the in-memory status invalid here.
-                 */
+                console.log('🔴 Session is invalid or expired');
                 set({
                     tokenValid: false,
+                    isAuthenticated: false,
+                    user: null,
                 });
-
                 return false;
             }
 
-            /*
-             * A backend 500/502/503 should not log the user out.
-             */
-            console.error(
-                'Token validation server error:',
-                error
-            );
-
-            set({
-                tokenValid: null,
-            });
-
+            // Server errors - don't invalidate
+            console.error('Token validation server error:', error);
+            set({ tokenValid: null });
             return false;
         }
     },
-
     updateUser: (partial) => {
         const current = get().user;
         if (current) {

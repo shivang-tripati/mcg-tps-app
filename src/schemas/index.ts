@@ -167,7 +167,7 @@ const optionalPositiveNumber = (label: string) =>
         },
         z
             // Use 'message' or 'error' instead of 'invalid_type_error'
-            .number({ message: `${label} must be a number` }) 
+            .number({ message: `${label} must be a number` })
             .finite(`${label} must be a valid number`)
             .positive(`${label} must be greater than 0`)
             .optional()
@@ -347,11 +347,11 @@ export const approvePermitSchema = z
     .superRefine(validatePermitDateRange);
 
 export const rejectPermitSchema = z.object({
-    reason: z.string().trim().min(10, 'Rejection reason must be at least 10 characters'),
+    reason: z.string().trim().min(5, 'Rejection reason must be at least 10 characters'),
 });
 
 export const cancelPermitSchema = z.object({
-    reason: z.string().trim().min(10, 'Cancellation reason must be at least 10 characters'),
+    reason: z.string().trim().min(5, 'Cancellation reason must be at least 10 characters'),
 });
 
 export const createWasteEvidenceSchema = z.object({

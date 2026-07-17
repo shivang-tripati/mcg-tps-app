@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useIsFocused } from '@react-navigation/native';
 import { CameraView, Camera } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { Button } from '../../components/ui/button';
 import {
     LucideScan,
@@ -19,7 +20,8 @@ import {
     LucidePackage,
     LucideClock,
     LucideWeight,
-    LucideHash
+    LucideHash,
+    LucideImage
 } from 'lucide-react-native';
 import axios from 'axios';
 
@@ -64,6 +66,7 @@ export default function ScanScreen() {
     const [hasPermission, setHasPermission] = useState<boolean | null>(null);
     const [scanned, setScanned] = useState(false);
     const [verifying, setVerifying] = useState(false);
+    const [processingImage, setProcessingImage] = useState(false);
     const [verifiedPermit, setVerifiedPermit] = useState<VerifiedPermit | null>(null);
     const [error, setError] = useState<string | null>(null);
 
@@ -128,8 +131,47 @@ export default function ScanScreen() {
         isScanningRef.current = false;
         setScanned(false);
         setVerifying(false);
+        setProcessingImage(false);
         setVerifiedPermit(null);
         setError(null);
+    };
+
+    const pickImage = async () => {
+        try {
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                setError('Sorry, we need media library permissions to make this work!');
+                setScanned(true);
+                return;
+            }
+
+            const result = await ImagePicker.launchImageLibraryAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                quality: 1,
+            });
+
+            if (!result.canceled && result.assets && result.assets[0]) {
+                isScanningRef.current = true;
+                setScanned(true);
+                setProcessingImage(true);
+                setError(null);
+
+                const scannedResults = await Camera.scanFromURLAsync(result.assets[0].uri, ['qr']);
+                
+                if (scannedResults && scannedResults.length > 0) {
+                    setProcessingImage(false);
+                    await processVerification(scannedResults[0].data);
+                } else {
+                    setProcessingImage(false);
+                    setError('No QR code found in the selected image.');
+                }
+            }
+        } catch (err: any) {
+            setProcessingImage(false);
+            setError('Failed to process image: ' + err.message);
+            setScanned(true);
+        }
     };
 
     const getVerificationStyle = (isActive: boolean) => {
@@ -189,7 +231,7 @@ export default function ScanScreen() {
     }
 
     // Show verification result
-    if (scanned && !verifying) {
+    if (scanned && !verifying && !processingImage) {
         const verification = verifiedPermit?.verification;
         const isActive = verification?.isActive ?? false;
         const vStyle = verifiedPermit ? getVerificationStyle(isActive) : null;
@@ -229,6 +271,17 @@ export default function ScanScreen() {
                                     onPress={resetScanner}
                                 >
                                     <Text className="text-white font-semibold">Try Again</Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={{ backgroundColor: 'transparent', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12, marginTop: 12, width: '100%', alignItems: 'center', borderWidth: 1, borderColor: '#cbd5e1', flexDirection: 'row', justifyContent: 'center', gap: 8 }}
+                                    onPress={() => {
+                                        resetScanner();
+                                        setTimeout(pickImage, 100);
+                                    }}
+                                >
+                                    <LucideImage size={18} color="#475569" />
+                                    <Text style={{ color: '#475569', fontWeight: '600' }}>Pick from Gallery</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -493,6 +546,28 @@ export default function ScanScreen() {
                                 <LucideScan size={18} color="white" />
                                 <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>Scan Another Permit</Text>
                             </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: 'transparent',
+                                    paddingVertical: 16,
+                                    borderRadius: 14,
+                                    alignItems: 'center',
+                                    marginBottom: 16,
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    borderWidth: 1,
+                                    borderColor: '#cbd5e1',
+                                }}
+                                onPress={() => {
+                                    resetScanner();
+                                    setTimeout(pickImage, 100);
+                                }}
+                            >
+                                <LucideImage size={18} color="#475569" />
+                                <Text style={{ color: '#475569', fontWeight: '600', fontSize: 15 }}>Pick from Gallery</Text>
+                            </TouchableOpacity>
                         </View>
                     ) : null}
                 </ScrollView>
@@ -511,7 +586,12 @@ export default function ScanScreen() {
 
             {/* Camera View */}
             <View className="flex-1">
-                {verifying ? (
+                {processingImage ? (
+                    <View className="flex-1 items-center justify-center bg-black/80">
+                        <ActivityIndicator size="large" color="white" />
+                        <Text className="text-white mt-4">Reading QR from image...</Text>
+                    </View>
+                ) : verifying ? (
                     <View className="flex-1 items-center justify-center bg-black/80">
                         <ActivityIndicator size="large" color="white" />
                         <Text className="text-white mt-4">Verifying permit...</Text>
@@ -541,10 +621,18 @@ export default function ScanScreen() {
 
             {/* Instructions */}
             <View className="px-6 py-4 bg-card border-t border-border">
-                <View className="flex-row items-center justify-center">
+                <View className="flex-row items-center justify-center mb-4">
                     <LucideScan size={20} color="hsl(325 45% 32%)" />
                     <Text className="text-foreground ml-2">Position the QR code within the frame to verify</Text>
                 </View>
+
+                <TouchableOpacity
+                    className="bg-secondary py-3 rounded-lg flex-row items-center justify-center border border-border"
+                    onPress={pickImage}
+                >
+                    <LucideImage size={20} color="hsl(240 3.8% 46.1%)" />
+                    <Text className="text-foreground font-medium ml-2">Choose from Gallery</Text>
+                </TouchableOpacity>
             </View>
         </SafeAreaView>
     );

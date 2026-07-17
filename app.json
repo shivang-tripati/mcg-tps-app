@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mcg.transportpermit",
+      "bundleIdentifier": "com.mfg.transportpermit",
       "associatedDomains": [
         "applinks:yourdomain.com"
       ]
@@ -27,7 +27,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.mcg.transportpermit",
+      "package": "com.mfg.transportpermit",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -64,6 +64,14 @@
         "expo-image-picker",
         {
           "photosPermission": "Allow $(PRODUCT_NAME) to attach waste evidence photos."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow $(PRODUCT_NAME) to access your photos.",
+          "savePhotosPermission": "Allow $(PRODUCT_NAME) to save photos.",
+          "isAccessMediaLocationEnabled": true
         }
       ],
       "expo-font",

@@ -7,7 +7,6 @@ import {
     LucideMapPin,
     LucideTruck,
     LucideUser,
-    LucideBuilding2,
     LucideFileText,
     LucideCheckCircle,
     LucideXCircle,
@@ -26,6 +25,7 @@ import {
     useCompletePermit,
     usePermitQRCode
 } from '../../../hooks/use-admin-permits';
+import ImageViewerModal from '../../../components/shared/image-viewer-modal';
 import { StatusBadge } from '../../../components/ui/status-badge';
 import { PermitStatus } from '../../../types/database';
 import { Button } from '../../../components/ui/button';
@@ -60,10 +60,13 @@ export default function AdminPermitDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<'overview' | 'evidence' | 'weighments' | 'audit'>('overview');
+    const [isImageViewerVisible, setIsImageViewerVisible] = useState(false);
+    const [selectedImageIndex, setSelectedImageIndex] = useState(0);
 
     // API Hooks
     const { data: response, isLoading, refetch } = useAdminPermit(id);
     const permit = response?.data;
+
 
     // QR Code Query - only fetch if status allows
     const showQRCode = permit ? ['APPROVED', 'IN_TRANSIT', 'COMPLETED'].includes(permit.status) : false;
@@ -116,6 +119,11 @@ export default function AdminPermitDetailScreen() {
             console.error('Complete error:', error);
         }
     };
+
+    const evidenceImages = permit.wasteEvidences.map((evidence) => ({
+        url: resolveEvidenceFileUrl(evidence.filePath),
+        fileName: evidence.fileName ?? `Evidence_${evidence.id}.jpg`,
+    }));
 
     // Permission Logic
     const canApprove = [PermitStatus.SUBMITTED, PermitStatus.UNDER_REVIEW].includes(permit.status as any);
@@ -375,39 +383,76 @@ export default function AdminPermitDetailScreen() {
                 )}
 
                 {activeTab === 'evidence' && (
-                    <View className="p-4">
-                        <View className="flex-row items-center mb-4">
-                            <LucideImage size={18} color="hsl(325 45% 32%)" />
-                            <Text className="text-sm font-semibold text-foreground ml-2">Waste Evidence Photos</Text>
+                    <>
+                        <View className="p-4">
+                            <View className="flex-row items-center mb-4">
+                                <LucideImage size={18} color="hsl(325 45% 32%)" />
+                                <Text className="text-sm font-semibold text-foreground ml-2">
+                                    Waste Evidence Photos
+                                </Text>
+                            </View>
+
+                            {permit.wasteEvidences.length === 0 ? (
+                                <View className="bg-card p-8 rounded-lg border border-border items-center">
+                                    <LucideCamera
+                                        size={48}
+                                        color="hsl(240 3.8% 46.1%)"
+                                        opacity={0.5}
+                                    />
+                                    <Text className="text-muted-foreground text-center mt-4">
+                                        No evidence photos uploaded.
+                                    </Text>
+                                </View>
+                            ) : (
+                                <View className="flex-row flex-wrap justify-between">
+                                    {permit.wasteEvidences.map((evidence) => (
+                                        <TouchableOpacity
+                                            key={evidence.id}
+                                            activeOpacity={0.9}
+                                            onPress={() => {
+                                                setSelectedImageIndex(
+                                                    permit.wasteEvidences.findIndex(
+                                                        (e) => e.id === evidence.id
+                                                    )
+                                                );
+                                                setIsImageViewerVisible(true);
+                                            }}
+                                            className="bg-card rounded-lg overflow-hidden border border-border w-[48%] mb-4"
+                                        >
+                                            <Image
+                                                source={{
+                                                    uri: resolveEvidenceFileUrl(evidence.filePath),
+                                                }}
+                                                className="w-full h-48 bg-gray-100"
+                                                resizeMode="cover"
+                                            />
+
+                                            <View className="p-2">
+                                                {evidence.description && (
+                                                    <Text className="text-xs text-muted-foreground">
+                                                        {evidence.description}
+                                                    </Text>
+                                                )}
+
+                                                <Text className="text-xs text-muted-foreground mt-1">
+                                                    {formatDateShort(evidence.createdAt)}
+                                                </Text>
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
                         </View>
-                        {permit.wasteEvidences.length === 0 ? (
-                            <View className="bg-card p-8 rounded-lg border border-border items-center">
-                                <LucideCamera size={48} color="hsl(240 3.8% 46.1%)" opacity={0.5} />
-                                <Text className="text-muted-foreground text-center mt-4">No evidence photos uploaded.</Text>
-                            </View>
-                        ) : (
-                            <View className="flex-row flex-wrap gap-2">
-                                {permit.wasteEvidences.map((evidence) => (
-                                    <View key={evidence.id} className="bg-card rounded-lg overflow-hidden border border-border w-[48%] mb-4">
-                                        <Image
-                                            source={{ uri: resolveEvidenceFileUrl(evidence.filePath) }}
-                                            className="w-full h-48 bg-gray-100"
-                                            resizeMode="cover"
-                                        />
-                                        <View className="p-2">
-                                            {evidence.description && (
-                                                <Text className="text-xs text-muted-foreground">{evidence.description}</Text>
-                                            )}
-                                            <Text className="text-xs text-muted-foreground mt-1">
-                                                {formatDateShort(evidence.createdAt)}
-                                            </Text>
-                                        </View>
-                                    </View>
-                                ))}
-                            </View>
-                        )}
-                    </View>
+
+                        <ImageViewerModal
+                            visible={isImageViewerVisible}
+                            onClose={() => setIsImageViewerVisible(false)}
+                            images={evidenceImages}
+                            initialIndex={selectedImageIndex}
+                        />
+                    </>
                 )}
+
 
                 {activeTab === 'weighments' && (
                     <View className="p-4">
@@ -581,15 +626,19 @@ export default function AdminPermitDetailScreen() {
             </View>
 
             {/* Modals */}
-            <ApprovePermitModal
-                visible={isApproveModalVisible}
-                onClose={() => setIsApproveModalVisible(false)}
-                permitId={id}
-                onSuccess={() => {
-                    refetch();
-                    setIsApproveModalVisible(false);
-                }}
-            />
+            {permit.validFrom && permit.validUntil && (
+                <ApprovePermitModal
+                    visible={isApproveModalVisible}
+                    onClose={() => setIsApproveModalVisible(false)}
+                    permitId={id}
+                    initialValidFrom={permit.validFrom}
+                    initialValidUntil={permit.validUntil}
+                    onSuccess={() => {
+                        refetch();
+                        setIsApproveModalVisible(false);
+                    }}
+                />
+            )}
 
             <RejectPermitModal
                 visible={isRejectModalVisible}
