@@ -28,15 +28,22 @@ export interface PermitDetail {
   estimatedVolume?: number | null;
   wasteDescription?: string | null;
 
+  projectId?: string | null;
+  companyId?: string | null;
+  plantId: string;
+
   pickupAddress?: string | null;
   pickupCity?: string | null;
   pickupState?: string | null;
   pickupPincode?: string | null;
+  pickupLatitude?: number | null;
+  pickupLongitude?: number | null;
 
   driverName?: string | null;
   driverPhone?: string | null;
   vehicleNumber?: string | null;
   vehicleType?: string | null;
+  licenseNumber?: string | null;
 
   validFrom?: string | null;
   validUntil?: string | null;

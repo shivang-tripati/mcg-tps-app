@@ -9,26 +9,27 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { LucideArrowLeft } from 'lucide-react-native';
+import { LucideArrowLeft, LucidePencil, LucideRefreshCw, } from 'lucide-react-native';
 
-import { usePermit, usePermitQRCode } from '../../../hooks/use-permits';
-import { Card } from '../../../components/shared/card';
-import { ErrorState } from '../../../components/shared/error-state';
-import { OverviewCard } from '../../../components/shared/overview-card';
-import { LocationCards } from '../../../components/shared/location-cards';
-import { VehicleCard } from '../../../components/shared/vehicle-card';
-import { EvidenceSection } from '../../../components/shared/evidence-section';
-import { WeighmentSection } from '../../../components/shared/weighment-section';
-import { RejectionCard } from '../../../components/shared/rejection-card';
-import { DigitalPermitCard } from '../../../components/shared/digital-permit-card';
-import { StatusBreakdown } from '../../../components/shared/status-breakdown-card';
-import { normalizeId} from '../../../components/shared/helpers';
-import { PRIMARY } from '../../../data/contant';
+import { usePermit, usePermitQRCode } from '../../../../hooks/use-permits';
+import { Card } from '../../../../components/shared/card';
+import { ErrorState } from '../../../../components/shared/error-state';
+import { OverviewCard } from '../../../../components/shared/overview-card';
+import { LocationCards } from '../../../../components/shared/location-cards';
+import { VehicleCard } from '../../../../components/shared/vehicle-card';
+import { EvidenceSection } from '../../../../components/shared/evidence-section';
+import { WeighmentSection } from '../../../../components/shared/weighment-section';
+import { RejectionCard } from '../../../../components/shared/rejection-card';
+import { DigitalPermitCard } from '../../../../components/shared/digital-permit-card';
+import { StatusBreakdown } from '../../../../components/shared/status-breakdown-card';
+import { normalizeId } from '../../../../components/shared/helpers';
+import { PRIMARY } from '../../../../data/contant';
 
 export default function PermitDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const id = normalizeId(params.id);
   const router = useRouter();
+
 
   const {
     data,
@@ -65,6 +66,11 @@ export default function PermitDetailScreen() {
     );
   }
 
+
+  const isDraft = permit.status === 'DRAFT';
+  const hasEvidence =
+    (permit.wasteEvidences?.length ?? 0) > 0;
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="px-5 pt-4 pb-4 bg-primary flex-row items-center">
@@ -92,6 +98,54 @@ export default function PermitDetailScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
+
+        {isDraft ? (
+          <Card>
+            <View className="flex-row items-start">
+              <View className="h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                <LucidePencil
+                  size={20}
+                  color={PRIMARY}
+                />
+              </View>
+
+              <View className="ml-3 flex-1">
+                <Text className="text-base font-semibold text-foreground">
+                  Draft permit
+                </Text>
+
+                <Text className="mt-1 text-sm leading-5 text-muted-foreground">
+                  You can update permit details, add evidence and retry submission.
+                </Text>
+
+                {!hasEvidence ? (
+                  <Text className="mt-2 text-xs font-medium text-amber-700">
+                    Waste evidence is still required.
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={() =>
+                router.push(
+                  `/permits/${permit.id}/edit`
+                )
+              }
+              activeOpacity={0.85}
+              className="mt-4 flex-row items-center justify-center rounded-xl bg-primary px-4 py-3"
+            >
+              <LucidePencil
+                size={18}
+                color="white"
+              />
+
+              <Text className="ml-2 font-semibold text-white">
+                Edit and continue
+              </Text>
+            </TouchableOpacity>
+          </Card>
+        ) : null}
 
         <OverviewCard permit={permit} />
 

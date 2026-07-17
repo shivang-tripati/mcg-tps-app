@@ -21,6 +21,7 @@ import {
     LucideInbox,
     LucideAlertCircle,
     LucideWifiOff,
+    LucidePencilLine,
 } from 'lucide-react-native';
 import Toast from 'react-native-toast-message';
 import { usePermits } from '../../../hooks/use-permits';
@@ -339,6 +340,15 @@ export default function PermitsScreen() {
                         year: 'numeric',
                     })}
                 </Text>
+
+                {item.status === 'DRAFT' ? (
+                    <View className="flex-1 flex-row items-center justify-end gap-1">
+                        <LucidePencilLine size={12} color={PRIMARY} />
+                        <Text className="text-xs font-semibold" style={{ color: PRIMARY }}>
+                            Continue
+                        </Text>
+                    </View>
+                ) : null}
             </View>
         </TouchableOpacity>
     );

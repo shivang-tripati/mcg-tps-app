@@ -6,13 +6,18 @@ import { ApiResponse } from '../types/api';
 import Toast from 'react-native-toast-message';
 import { AxiosError } from 'axios';
 import { PermitDetail, QRCodeData } from '../types/permits';
+import { fetch as expoFetch } from 'expo/fetch';
+import { File } from 'expo-file-system';
+import {
+    AUTH_TOKEN_KEY,
+    SecureStorage,
+} from '../lib/storage';
 
-// ✅ Type guard to check if error is AxiosError
 function isAxiosError(error: unknown): error is AxiosError {
     return (error as AxiosError)?.isAxiosError === true;
 }
 
-// ✅ Type guard to check if error is network error
+
 function isNetworkError(error: unknown): boolean {
     if (isAxiosError(error)) {
         return error.message === 'Network Error' || 
@@ -539,112 +544,344 @@ export function useUploadPermitWasteEvidence() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({ permitId, uri }: { permitId: string; uri: string }) => {
+        mutationFn: async ({
+            permitId,
+            uri,
+        }: {
+            permitId: string;
+            uri: string;
+        }) => {
             try {
+                const baseURL =
+                    api.defaults.baseURL?.replace(/\/+$/, '');
+
+                if (!baseURL) {
+                    throw new Error(
+                        'API base URL is not configured.'
+                    );
+                }
+
+                const uploadPath =
+                    UPLOAD_FILE_PATH.replace(/^\/+/, '');
+
+                const uploadUrl =
+                    `${baseURL}/${uploadPath}`;
+
+                const accessToken =
+                    await SecureStorage.getItem(
+                        AUTH_TOKEN_KEY
+                    );
+
+                if (!accessToken) {
+                    throw new Error(
+                        'Authentication token is missing. Please log in again.'
+                    );
+                }
+
+                /*
+                 * Create a native Expo File reference from the
+                 * URI returned by ImagePicker.
+                 */
+                const file = new File(uri);
+
+                if (!file.exists) {
+                    throw new Error(
+                        'The selected image is no longer available. Please select it again.'
+                    );
+                }
+
+                if (!file.size || file.size <= 0) {
+                    throw new Error(
+                        'The selected image is empty or cannot be read.'
+                    );
+                }
+
+                /*
+                 * Keep this aligned with the backend's 5MB limit.
+                 */
+                if (file.size > 5 * 1024 * 1024) {
+                    throw new Error(
+                        'The selected image exceeds the 5MB upload limit.'
+                    );
+                }
+
                 const formData = new FormData();
-                const ext = uri.split('.').pop()?.toLowerCase() || 'jpg';
-                const mime =
-                    ext === 'png'
-                        ? 'image/png'
-                        : ext === 'webp'
-                          ? 'image/webp'
-                          : ext === 'pdf'
-                            ? 'application/pdf'
-                            : 'image/jpeg';
-                const name = `evidence.${ext}`;
-                formData.append('file', {
-                    uri: Platform.OS === 'ios' ? uri.replace('file://', '') : uri,
-                    name,
-                    type: mime,
-                } as any);
-                formData.append('type', 'waste_evidence');
 
-                const uploadRes = await api.post<ApiResponse<UploadFileResult>>(
-                    UPLOAD_FILE_PATH, 
-                    formData,
-                    {
-                        timeout: 30000,
-                        transformRequest: (data, headers) => {
-                            if (data instanceof FormData) {
-                                delete (headers as Record<string, unknown>)['Content-Type'];
-                            }
-                            return data;
+                formData.append('file', file);
+                formData.append(
+                    'type',
+                    'waste_evidence'
+                );
+
+                console.log('[EVIDENCE UPLOAD START]', {
+                    permitId,
+                    uploadUrl,
+                    uri,
+                    fileName: file.name,
+                    fileSize: file.size,
+                    mimeType: file.type,
+                    exists: file.exists,
+                });
+
+                /*
+                 * Do not manually add Content-Type.
+                 * expo/fetch will generate the multipart boundary.
+                 */
+                const uploadResponse =
+                    await expoFetch(uploadUrl, {
+                        method: 'POST',
+                        headers: {
+                            Accept: 'application/json',
+                            Authorization:
+                                `Bearer ${accessToken}`,
+                            'X-Client-Type': 'mobile',
                         },
-                    }
-                );
+                        body: formData,
+                    });
 
-                const uploadBody = uploadRes.data;
-                if (!uploadBody.success || !uploadBody.data) {
-                    const errorMsg = 
-                        (uploadBody as any)?.error?.message || 
-                        (uploadBody as any)?.message || 
-                        'File upload failed';
-                    throw new Error(errorMsg);
+                const responseText =
+                    await uploadResponse.text();
+
+                console.log('[EVIDENCE UPLOAD RESPONSE]', {
+                    status: uploadResponse.status,
+                    ok: uploadResponse.ok,
+                    responseText,
+                });
+
+                let uploadBody:
+                    | ApiResponse<UploadFileResult>
+                    | undefined;
+
+                try {
+                    uploadBody = responseText
+                        ? JSON.parse(responseText)
+                        : undefined;
+                } catch {
+                    throw new Error(
+                        `Upload server returned an invalid response with status ${uploadResponse.status}.`
+                    );
                 }
 
-                const u = uploadBody.data;
+                if (
+                    !uploadResponse.ok ||
+                    !uploadBody?.success ||
+                    !uploadBody.data
+                ) {
+                    const message =
+                        (uploadBody as any)?.error?.message ||
+                        (uploadBody as any)?.message ||
+                        `File upload failed with status ${uploadResponse.status}`;
 
-                const evidenceRes = await api.post<ApiResponse<unknown>>(
-                    `/permits/${permitId}/evidence`,
-                    {
-                        permitId,
-                        fileName: u.fileName,
-                        filePath: u.path,
-                        fileSize: u.size,
-                        mimeType: u.mimeType,
-                        description: 'Initial evidence',
-                    },
-                    { timeout: 15000 }
-                );
+                    throw new Error(message);
+                }
 
-                const evidenceBody = evidenceRes.data;
+                const uploadedFile =
+                    uploadBody.data;
+
+                /*
+                 * Physical file upload succeeded.
+                 * Now register its metadata against the permit.
+                 */
+                const evidenceResponse =
+                    await api.post<ApiResponse<unknown>>(
+                        `/permits/${permitId}/evidence`,
+                        {
+                            permitId,
+                            fileName:
+                                uploadedFile.fileName,
+                            filePath:
+                                uploadedFile.path,
+                            fileSize:
+                                uploadedFile.size,
+                            mimeType:
+                                uploadedFile.mimeType,
+                            description:
+                                'Initial evidence',
+                        },
+                        {
+                            timeout: 15000,
+                        }
+                    );
+
+                const evidenceBody =
+                    evidenceResponse.data;
+
                 if (!evidenceBody.success) {
-                    const errorMsg = 
-                        (evidenceBody as any)?.error?.message || 
-                        (evidenceBody as any)?.message || 
+                    const message =
+                        (evidenceBody as any)
+                            ?.error?.message ||
+                        (evidenceBody as any)
+                            ?.message ||
                         'Failed to register waste evidence';
-                    throw new Error(errorMsg);
+
+                    throw new Error(message);
                 }
-                
+
                 return evidenceBody;
             } catch (error: unknown) {
-                console.error('Upload Evidence Error:', error);
-                
+                console.error(
+                    '[EVIDENCE UPLOAD FAILED]',
+                    {
+                        permitId,
+                        uri,
+                        error:
+                            error instanceof Error
+                                ? {
+                                      name: error.name,
+                                      message: error.message,
+                                      stack: error.stack,
+                                  }
+                                : error,
+                    }
+                );
+
                 if (isAxiosError(error)) {
-                    if (isNetworkError(error)) {
-                        throw new Error('Network error while uploading. Please try again.');
+                    const status =
+                        error.response?.status;
+
+                    if (status === 400) {
+                        throw new Error(
+                            getErrorMessage(error)
+                        );
                     }
-                    
-                    const status = error.response?.status;
-                    if (status === 413) {
-                        throw new Error('File is too large. Please upload a smaller file.');
-                    }
-                    if (status === 415) {
-                        throw new Error('Unsupported file type. Please upload a valid image or PDF.');
-                    }
+
                     if (status === 401) {
-                        throw new Error('Your session has expired. Please log in again.');
+                        throw new Error(
+                            'Your session has expired. Please log in again.'
+                        );
                     }
+
                     if (status === 403) {
-                        throw new Error('You do not have permission to upload evidence.');
+                        throw new Error(
+                            'You do not have permission to upload evidence.'
+                        );
+                    }
+
+                    if (status === 413) {
+                        throw new Error(
+                            'The image exceeds the upload-size limit.'
+                        );
+                    }
+
+                    if (status === 415) {
+                        throw new Error(
+                            'Unsupported image format.'
+                        );
                     }
                 }
-                
-                throw new Error(getErrorMessage(error));
+
+                if (error instanceof Error) {
+                    throw error;
+                }
+
+                throw new Error(
+                    'Waste evidence could not be uploaded.'
+                );
             }
         },
+
         onSuccess: (_, { permitId }) => {
-            queryClient.invalidateQueries({ queryKey: ['permits'] });
-            queryClient.invalidateQueries({ queryKey: ['permit', permitId] });
+            queryClient.invalidateQueries({
+                queryKey: ['permits'],
+            });
+
+            queryClient.invalidateQueries({
+                queryKey: ['permit', permitId],
+            });
         },
+
         onError: (error: Error) => {
             Toast.show({
                 type: 'error',
-                text1: 'Upload Failed',
-                text2: error.message || 'Could not upload evidence',
+                text1: 'Upload failed',
+                text2:
+                    error.message ||
+                    'Could not upload waste evidence.',
                 position: 'top',
                 visibilityTime: 4000,
                 autoHide: true,
+            });
+        },
+    });
+}
+
+// ────────────────────────────────────────────────────────────────
+// useUpdatePermit – PATCH /permits/:id
+// ────────────────────────────────────────────────────────────────
+
+interface UpdatePermitVariables {
+    permitId: string;
+    data: CreatePermitInput;
+}
+
+export function useUpdatePermit() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({
+            permitId,
+            data,
+        }: UpdatePermitVariables) => {
+            try {
+                const response = await api.patch<ApiResponse<Permit>>(
+                    `/permits/${permitId}`,
+                    data,
+                    { timeout: 20000 }
+                );
+                return response.data;
+            } catch (error: unknown) {
+                if (isAxiosError(error)) {
+                    if (isNetworkError(error)) {
+                        throw new PermitApiError(
+                            'Unable to connect to the server. Check your internet connection.'
+                        );
+                    }
+
+                    const status = error.response?.status;
+                    const responseData = error.response?.data;
+
+                    if (status === 400) {
+                        const fieldErrors = extractPermitFieldErrors(responseData);
+                        const message =
+                            (responseData as any)?.error?.message ||
+                            (responseData as any)?.message ||
+                            'Please correct the invalid permit details.';
+
+                        throw new PermitApiError(message, fieldErrors, status);
+                    }
+
+                    if (status === 401) {
+                        throw new PermitApiError(
+                            'Your session has expired. Please log in again.',
+                            {},
+                            status
+                        );
+                    }
+
+                    if (status === 403) {
+                        throw new PermitApiError(
+                            'You do not have permission to update this permit.',
+                            {},
+                            status
+                        );
+                    }
+
+                    if (status === 404) {
+                        throw new PermitApiError(
+                            'The permit could not be found.',
+                            {},
+                            status
+                        );
+                    }
+                }
+
+                throw new PermitApiError(getErrorMessage(error));
+            }
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({ queryKey: ['permits'] });
+            queryClient.invalidateQueries({
+                queryKey: ['permit', variables.permitId],
             });
         },
     });

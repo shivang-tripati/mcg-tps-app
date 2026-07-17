@@ -9,12 +9,21 @@ export default function PermitsLayout() {
                 headerShown: false,
             }}
         >
-            {/* ✅ ADD THIS - the index route */}
+
             <Stack.Screen
                 name="index"
                 options={{
                     title: 'Permits',
                     headerShown: false,
+                }}
+            />
+
+            <Stack.Screen
+                name="new"
+                options={{
+                    title: 'Create Permit',
+                    headerShown: false,
+                    presentation: 'modal',
                 }}
             />
             
@@ -26,13 +35,11 @@ export default function PermitsLayout() {
                 }}
             />
             
-            {/* ✅ Also add the new route if you have it */}
             <Stack.Screen
-                name="new"
+                name="[id]/edit"
                 options={{
-                    title: 'Create Permit',
+                    title: 'Edit Draft Permit',
                     headerShown: false,
-                    presentation: 'modal',
                 }}
             />
         </Stack>

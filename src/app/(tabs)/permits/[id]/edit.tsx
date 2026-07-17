@@ -8,11 +8,12 @@ import {
     Pressable,
     ScrollView,
     Text,
+    TouchableOpacity,
     useWindowDimensions,
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Controller,
@@ -30,31 +31,38 @@ import {
     ImagePlus,
     Info,
     MapPin,
+    ShieldAlert,
     Trash2,
 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import Toast from 'react-native-toast-message';
 
-import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
-import { Select } from '../../../components/ui/select';
-import { StepIndicator } from '../../../components/ui/step-indicator';
-import DateTimeFormField from '../../../components/ui/date-time-from-field';
-import { usePlants, useProjects } from '../../../hooks/use-reference-data';
+import { Button } from '../../../../components/ui/button';
+import { Input } from '../../../../components/ui/input';
+import { Select } from '../../../../components/ui/select';
+import { StepIndicator } from '../../../../components/ui/step-indicator';
+import DateTimeFormField from '../../../../components/ui/date-time-from-field';
+import { usePlants, useProjects } from '../../../../hooks/use-reference-data';
 import {
     PermitApiError,
-    useCreatePermit,
+    usePermit,
     useSubmitPermit,
+    useUpdatePermit,
     useUploadPermitWasteEvidence,
-} from '../../../hooks/use-permits';
-import { useAuth } from '../../../lib/auth-store';
+} from '../../../../hooks/use-permits';
+import { useAuth } from '../../../../lib/auth-store';
+import { ErrorState } from '../../../../components/shared/error-state';
+import { normalizeId } from '../../../../components/shared/helpers';
+import { resolveEvidenceFileUrl } from '../../../../lib/utils';
 import {
     createPermitSchema,
     submitCreatePermitSchema,
     WasteType,
     type CreatePermitFormValues,
     type CreatePermitInput,
-} from '../../../schemas/index';
+} from '../../../../schemas/index';
+import { PRIMARY as THEME_PRIMARY } from '../../../../data/contant';
 
 const PRIMARY = '#8F1D3F';
 const MUTED = '#6B7280';
@@ -172,48 +180,72 @@ function StepFeedback({ validated, hasError }: StepFeedbackProps) {
     return <View />;
 }
 
-export default function NewPermitScreen() {
+export default function EditDraftPermitScreen() {
+    const params = useLocalSearchParams<{ id?: string | string[] }>();
+    const id = normalizeId(params.id);
     const router = useRouter();
     const { width } = useWindowDimensions();
     const scrollRef = useRef<ScrollView>(null);
     const { user } = useAuth();
 
+    // ── Permit data ────────────────────────────────────────────────
+    const {
+        data: permitResponse,
+        isLoading: permitLoading,
+        error: permitError,
+        refetch: refetchPermit,
+    } = usePermit(id);
+
+    const permit = permitResponse?.data;
+
+    // ── Form initialisation guard ──────────────────────────────────
+    const initializedRef = useRef(false);
+
+    // ── Step state ─────────────────────────────────────────────────
     const [currentStep, setCurrentStep] = useState(1);
     const [validatedSteps, setValidatedSteps] = useState<number[]>([]);
-    const [evidenceUris, setEvidenceUris] = useState<string[]>([]);
-    const [evidenceError, setEvidenceError] = useState<string | undefined>();
     const [formError, setFormError] = useState<string | undefined>();
     const [locating, setLocating] = useState(false);
-    const [pendingPermitId, setPendingPermitId] =
-        useState<string | null>(null);
 
-    const [uploadedEvidenceUris, setUploadedEvidenceUris] =
-        useState<string[]>([]);
+    // ── Evidence state ─────────────────────────────────────────────
+    const [newEvidenceUris, setNewEvidenceUris] = useState<string[]>([]);
+    const [uploadedNewEvidenceUris, setUploadedNewEvidenceUris] = useState<string[]>([]);
+    const [evidenceError, setEvidenceError] = useState<string | undefined>();
+
+    // ── Submission guard ───────────────────────────────────────────
+    const submittingRef = useRef(false);
 
     const isWide = width >= 680;
     const isCompanyUser = user?.role === 'COMPANY_USER';
 
     const { data: plantsData, isLoading: plantsLoading } = usePlants();
     const { data: projectsData, isLoading: projectsLoading } = useProjects();
-    const createPermit = useCreatePermit();
+    const updatePermit = useUpdatePermit();
     const uploadEvidence = useUploadPermitWasteEvidence();
     const submitPermit = useSubmitPermit();
 
     const plants = plantsData?.data || [];
     const projects = projectsData?.data || [];
+
     const busy =
-        createPermit.isPending ||
+        updatePermit.isPending ||
         uploadEvidence.isPending ||
         submitPermit.isPending;
 
+    // ── Existing evidence from the loaded permit ───────────────────
+    const existingEvidence = permit?.wasteEvidences ?? [];
+    const remainingSlots = Math.max(
+        0,
+        MAX_EVIDENCE_IMAGES - existingEvidence.length - newEvidenceUris.length
+    );
+
+    // ── Form setup ─────────────────────────────────────────────────
     const form = useForm<CreatePermitFormValues>({
         resolver: zodResolver(createPermitSchema) as Resolver<CreatePermitFormValues>,
         mode: 'onTouched',
         reValidateMode: 'onChange',
         delayError: 200,
         shouldFocusError: true,
-        // Multi-step fields are hidden/unmounted while navigating. Keep their
-        // values registered so earlier steps are available during final submit.
         shouldUnregister: false,
         defaultValues: {
             wasteType: 'CND_SEGREGATED',
@@ -256,10 +288,44 @@ export default function NewPermitScreen() {
         [currentStep, errors]
     );
 
+    // ── Populate form from permit data (once) ──────────────────────
+    useEffect(() => {
+        if (!permit || initializedRef.current) return;
+
+        form.reset({
+            wasteType: (permit.wasteType as (typeof WasteType)[number]) || 'CND_SEGREGATED',
+            estimatedWeight:
+                permit.estimatedWeight != null
+                    ? String(permit.estimatedWeight)
+                    : '',
+            estimatedVolume: undefined,
+            wasteDescription: permit.wasteDescription || '',
+            projectId: permit.projectId || permit.project?.id || undefined,
+            plantId: permit.plantId || permit.plant?.id || '',
+            pickupAddress: permit.pickupAddress || '',
+            pickupCity: permit.pickupCity || '',
+            pickupState: permit.pickupState || '',
+            pickupPincode: permit.pickupPincode || '',
+            pickupLatitude: permit.pickupLatitude ?? undefined,
+            pickupLongitude: permit.pickupLongitude ?? undefined,
+            driverName: permit.driverName || '',
+            driverPhone: permit.driverPhone || '',
+            vehicleNumber: permit.vehicleNumber || '',
+            vehicleType: permit.vehicleType || '',
+            licenseNumber: permit.licenseNumber || '',
+            validFrom: permit.validFrom || '',
+            validUntil: permit.validUntil || '',
+        });
+
+        initializedRef.current = true;
+    }, [permit, form]);
+
+    // ── Scroll to top on step change ───────────────────────────────
     useEffect(() => {
         scrollRef.current?.scrollTo({ y: 0, animated: false });
     }, [currentStep]);
 
+    // ── Auto-select single plant ───────────────────────────────────
     useEffect(() => {
         if (plants.length !== 1 || getValues('plantId')) return;
         setValue('plantId', plants[0].id, {
@@ -268,6 +334,7 @@ export default function NewPermitScreen() {
         });
     }, [getValues, plants, setValue]);
 
+    // ── Auto-fill address from project ─────────────────────────────
     useEffect(() => {
         if (!isCompanyUser || !projectId) return;
 
@@ -310,6 +377,7 @@ export default function NewPermitScreen() {
         }
     }, [isCompanyUser, projectId, projects, setValue]);
 
+    // ── Helpers ────────────────────────────────────────────────────
     const applyIssues = useCallback(
         (issues: ZodIssue[]) => {
             for (const issue of issues) {
@@ -336,8 +404,6 @@ export default function NewPermitScreen() {
         clearErrors(fields);
         setFormError(undefined);
 
-        // Step 3 uses the stricter submit schema so users cannot proceed with
-        // incomplete driver/vehicle details. Draft validation remains separate.
         const schema = step === 3 ? submitCreatePermitSchema : createPermitSchema;
         const result = schema.safeParse(getValues());
 
@@ -456,8 +522,9 @@ export default function NewPermitScreen() {
         }
     }, [setValue]);
 
+    // ── Evidence helpers ───────────────────────────────────────────
     const addEvidenceFrom = async (source: 'camera' | 'library') => {
-        if (evidenceUris.length >= MAX_EVIDENCE_IMAGES) return;
+        if (remainingSlots <= 0) return;
 
         const permission =
             source === 'camera'
@@ -490,10 +557,10 @@ export default function NewPermitScreen() {
 
         if (result.canceled || !result.assets?.[0]?.uri) return;
 
-        setEvidenceUris((previous) => [
-            ...previous,
-            result.assets[0].uri,
-        ].slice(0, MAX_EVIDENCE_IMAGES));
+        setNewEvidenceUris((previous) => {
+            const maxNew = MAX_EVIDENCE_IMAGES - existingEvidence.length;
+            return [...previous, result.assets[0].uri].slice(0, maxNew);
+        });
         setEvidenceError(undefined);
     };
 
@@ -511,24 +578,23 @@ export default function NewPermitScreen() {
         ]);
     };
 
-    const removeEvidence = (index: number) => {
-    const uri = evidenceUris[index];
+    const removeNewEvidence = (index: number) => {
+        const uri = newEvidenceUris[index];
 
-    if (uploadedEvidenceUris.includes(uri)) {
-        Alert.alert(
-            'Evidence already uploaded',
-            'This image is already attached to the pending permit and cannot be removed while retrying submission.'
+        if (uploadedNewEvidenceUris.includes(uri)) {
+            Alert.alert(
+                'Evidence already uploaded',
+                'This image has already been uploaded and cannot be removed while retrying.'
+            );
+            return;
+        }
+
+        setNewEvidenceUris((previous) =>
+            previous.filter((_, itemIndex) => itemIndex !== index)
         );
-        return;
-    }
+    };
 
-    setEvidenceUris((previous) =>
-        previous.filter(
-            (_, itemIndex) => itemIndex !== index
-        )
-    );
-};
-
+    // ── Server field error mapping ─────────────────────────────────
     const applyServerFieldErrors = (error: PermitApiError): boolean => {
         const entries = Object.entries(error.fieldErrors || {});
         if (entries.length === 0) return false;
@@ -554,151 +620,163 @@ export default function NewPermitScreen() {
         return false;
     };
 
-    const submitForm = async () => {
+    // ── Build payload ──────────────────────────────────────────────
+    const buildPayload = (data: CreatePermitInput): CreatePermitInput => {
+        const payload: CreatePermitInput = { ...data };
+        delete payload.estimatedVolume;
+        delete payload.companyId;
+        if (!isCompanyUser) {
+            delete payload.projectId;
+        }
+        return payload;
+    };
+
+    // ── Save changes (keep DRAFT) ──────────────────────────────────
+    const handleSaveChanges = async () => {
+        if (submittingRef.current || busy || !id) return;
+        submittingRef.current = true;
+
         Keyboard.dismiss();
         clearErrors();
         setFormError(undefined);
         setEvidenceError(undefined);
 
-        const validation = submitCreatePermitSchema.safeParse(
-            getValues()
-        );
+        const validation = createPermitSchema.safeParse(getValues());
 
         if (!validation.success) {
             applyIssues(validation.error.issues);
             moveToFirstErrorStep(validation.error.issues);
-
-            setFormError(
-                'Please correct the highlighted fields before submitting.'
-            );
-
+            setFormError('Please correct the highlighted fields before saving.');
+            submittingRef.current = false;
             return;
         }
 
-        if (evidenceUris.length === 0) {
-            setEvidenceError(
-                'Upload at least one image of the waste before submitting.'
-            );
-
-            setCurrentStep(4);
-
-            setFormError(
-                'Waste evidence is required before submitting the permit.'
-            );
-
-            return;
-        }
-
-        const data = validation.data;
-
-        const payload: CreatePermitInput = {
-            ...data,
-        };
-
-        delete payload.estimatedVolume;
-        delete payload.companyId;
-
-        if (!isCompanyUser) {
-            delete payload.projectId;
-        }
-
-        /*
-         * Reuse an existing draft after an upload failure.
-         *
-         * A new draft is created only when no pending draft exists.
-         */
-        let permitId = pendingPermitId;
+        const payload = buildPayload(validation.data);
 
         try {
-            if (!permitId) {
-                const createResponse =
-                    await createPermit.mutateAsync({
-                        data: payload,
-                        mode: 'draft',
-                    });
+            await updatePermit.mutateAsync({
+                permitId: id,
+                data: payload,
+            });
 
-                if (
-                    !createResponse.success ||
-                    !createResponse.data?.id
-                ) {
-                    throw new Error(
-                        createResponse.error?.message ||
-                        'Could not create the permit'
-                    );
-                }
+            // Upload any selected new evidence (optional for save)
+            for (const uri of newEvidenceUris) {
+                if (uploadedNewEvidenceUris.includes(uri)) continue;
 
-                permitId = createResponse.data.id;
+                await uploadEvidence.mutateAsync({ permitId: id, uri });
 
-                /*
-                 * Save the ID immediately.
-                 *
-                 * If evidence upload fails, the next button press will reuse
-                 * this same permit instead of creating another draft.
-                 */
-                setPendingPermitId(permitId);
-            }
-
-            /*
-             * Upload only images that have not already completed successfully.
-             */
-            for (const uri of evidenceUris) {
-                if (uploadedEvidenceUris.includes(uri)) {
-                    continue;
-                }
-
-                await uploadEvidence.mutateAsync({
-                    permitId,
-                    uri,
-                });
-
-                setUploadedEvidenceUris((previous) =>
-                    previous.includes(uri)
-                        ? previous
-                        : [...previous, uri]
+                setUploadedNewEvidenceUris((previous) =>
+                    previous.includes(uri) ? previous : [...previous, uri]
                 );
             }
 
-            /*
-             * All selected evidence has now uploaded successfully.
-             * Finalize the existing draft.
-             */
+            Toast.show({
+                type: 'success',
+                text1: 'Draft updated successfully.',
+                position: 'top',
+                visibilityTime: 3000,
+                autoHide: true,
+            });
+
+            router.replace(`/permits/${id}`);
+        } catch (error: unknown) {
+            if (error instanceof PermitApiError && applyServerFieldErrors(error)) {
+                submittingRef.current = false;
+                return;
+            }
+
+            const message =
+                error instanceof Error
+                    ? error.message
+                    : 'The draft could not be saved.';
+
+            setFormError(message);
+
+            Alert.alert(
+                'Save Failed',
+                `${message}\n\nYour changes have been preserved. Try again when your connection is stable.`
+            );
+        } finally {
+            submittingRef.current = false;
+        }
+    };
+
+    // ── Submit permit ──────────────────────────────────────────────
+    const handleSubmitPermit = async () => {
+        if (submittingRef.current || busy || !id) return;
+        submittingRef.current = true;
+
+        Keyboard.dismiss();
+        clearErrors();
+        setFormError(undefined);
+        setEvidenceError(undefined);
+
+        const validation = submitCreatePermitSchema.safeParse(getValues());
+
+        if (!validation.success) {
+            applyIssues(validation.error.issues);
+            moveToFirstErrorStep(validation.error.issues);
+            setFormError('Please correct the highlighted fields before submitting.');
+            submittingRef.current = false;
+            return;
+        }
+
+        const existingEvidenceCount = existingEvidence.length;
+
+        if (existingEvidenceCount === 0 && newEvidenceUris.length === 0) {
+            setCurrentStep(4);
+            setEvidenceError('At least one waste evidence image is required.');
+            setFormError('Waste evidence is required before submitting the permit.');
+            submittingRef.current = false;
+            return;
+        }
+
+        const payload = buildPayload(validation.data);
+
+        try {
+            await updatePermit.mutateAsync({
+                permitId: id,
+                data: payload,
+            });
+
+            // Upload only new evidence that hasn't been uploaded yet
+            for (const uri of newEvidenceUris) {
+                if (uploadedNewEvidenceUris.includes(uri)) continue;
+
+                await uploadEvidence.mutateAsync({ permitId: id, uri });
+
+                setUploadedNewEvidenceUris((previous) =>
+                    previous.includes(uri) ? previous : [...previous, uri]
+                );
+            }
+
             await submitPermit.mutateAsync({
-                permitId,
+                permitId: id,
                 data: {
-                    driverName: data.driverName,
-                    driverPhone: data.driverPhone,
-                    vehicleNumber: data.vehicleNumber,
-                    vehicleType:
-                        data.vehicleType || undefined,
-                    licenseNumber:
-                        data.licenseNumber || undefined,
+                    driverName: validation.data.driverName,
+                    driverPhone: validation.data.driverPhone,
+                    vehicleNumber: validation.data.vehicleNumber,
+                    vehicleType: validation.data.vehicleType || undefined,
+                    licenseNumber: validation.data.licenseNumber || undefined,
                 },
             });
 
-            /*
-             * Clear retry state only after the complete workflow succeeds.
-             */
-            setPendingPermitId(null);
-            setUploadedEvidenceUris([]);
+            // Clear retry state only after complete success
+            setUploadedNewEvidenceUris([]);
+            setNewEvidenceUris([]);
 
-            Alert.alert(
-                'Permit Submitted',
-                'Your permit and waste evidence were submitted successfully.',
-                [
-                    {
-                        text: 'View Permit',
-                        onPress: () =>
-                            router.replace(
-                                `/permits/${permitId}`
-                            ),
-                    },
-                ]
-            );
+            Toast.show({
+                type: 'success',
+                text1: 'Permit submitted successfully.',
+                position: 'top',
+                visibilityTime: 3000,
+                autoHide: true,
+            });
+
+            router.replace(`/permits/${id}`);
         } catch (error: unknown) {
-            if (
-                error instanceof PermitApiError &&
-                applyServerFieldErrors(error)
-            ) {
+            if (error instanceof PermitApiError && applyServerFieldErrors(error)) {
+                submittingRef.current = false;
                 return;
             }
 
@@ -711,13 +789,14 @@ export default function NewPermitScreen() {
 
             Alert.alert(
                 'Permit Not Submitted',
-                permitId
-                    ? `${message}\n\nYour draft has been preserved. Tap Retry submission when your network connection is stable.`
-                    : message
+                `${message}\n\nYour draft has been preserved. Retry when your connection is stable.`
             );
+        } finally {
+            submittingRef.current = false;
         }
     };
 
+    // ── Render helpers ─────────────────────────────────────────────
     const renderStepHeader = (title: string, description: string) => (
         <View className="mb-5">
             <Text className="text-xl font-semibold text-foreground">{title}</Text>
@@ -725,6 +804,55 @@ export default function NewPermitScreen() {
         </View>
     );
 
+    // ── Loading state ──────────────────────────────────────────────
+    if (permitLoading) {
+        return (
+            <SafeAreaView className="flex-1 bg-background items-center justify-center">
+                <ActivityIndicator size="large" color={THEME_PRIMARY} />
+                <Text className="text-muted-foreground mt-3">Loading permit details...</Text>
+            </SafeAreaView>
+        );
+    }
+
+    // ── Error state ────────────────────────────────────────────────
+    if (permitError || !permit) {
+        return (
+            <ErrorState
+                message={permitError instanceof Error ? permitError.message : 'Permit not found.'}
+                onBack={() => router.back()}
+                onRetry={() => refetchPermit()}
+            />
+        );
+    }
+
+    // ── Status protection ──────────────────────────────────────────
+    if (permit.status !== 'DRAFT') {
+        return (
+            <SafeAreaView className="flex-1 bg-background items-center justify-center px-6">
+                <View className="h-16 w-16 items-center justify-center rounded-full bg-amber-50">
+                    <ShieldAlert size={32} color="#A16207" />
+                </View>
+
+                <Text className="mt-4 text-lg font-semibold text-foreground text-center">
+                    Cannot edit this permit
+                </Text>
+
+                <Text className="mt-2 text-sm text-muted-foreground text-center leading-5">
+                    This permit can no longer be edited because it has already been submitted or processed.
+                </Text>
+
+                <TouchableOpacity
+                    onPress={() => router.replace(`/permits/${id}`)}
+                    activeOpacity={0.85}
+                    className="mt-6 flex-row items-center justify-center rounded-xl bg-primary px-6 py-3"
+                >
+                    <Text className="font-semibold text-white">View permit details</Text>
+                </TouchableOpacity>
+            </SafeAreaView>
+        );
+    }
+
+    // ── Step renderers ─────────────────────────────────────────────
     const renderStep1 = () => (
         <View>
             {renderStepHeader(
@@ -905,10 +1033,10 @@ export default function NewPermitScreen() {
                 render={({ field: { onChange, value } }) => (
                     <Select
                         label="Waste type *"
-                        options={WasteType.map((id) => ({
-                            id,
-                            label: WASTE_LABELS[id].label,
-                            subtitle: WASTE_LABELS[id].subtitle,
+                        options={WasteType.map((wid) => ({
+                            id: wid,
+                            label: WASTE_LABELS[wid].label,
+                            subtitle: WASTE_LABELS[wid].subtitle,
                         }))}
                         value={value}
                         onSelect={onChange}
@@ -1060,11 +1188,13 @@ export default function NewPermitScreen() {
         </View>
     );
 
+    const totalEvidenceCount = existingEvidence.length + newEvidenceUris.length;
+
     const renderStep4 = () => (
         <View>
             {renderStepHeader(
                 'Schedule and evidence',
-                'Validity dates are optional during application. Add waste images before submitting for review.'
+                'Review validity dates and waste evidence before saving or submitting.'
             )}
 
             <DateTimeFormField
@@ -1093,35 +1223,68 @@ export default function NewPermitScreen() {
                 error={errors.validUntil?.message}
             />
 
+            {/* ── Existing evidence ────────────────────────────── */}
+            {existingEvidence.length > 0 ? (
+                <View className="mb-4">
+                    <Text className="text-sm font-medium text-foreground mb-2">
+                        Uploaded evidence
+                    </Text>
+                    <View className="flex-row flex-wrap gap-3">
+                        {existingEvidence.map((evidence) => {
+                            const fileUrl = resolveEvidenceFileUrl(evidence.filePath);
+                            return (
+                                <View key={evidence.id} className="relative">
+                                    <Image
+                                        source={{ uri: fileUrl }}
+                                        className="h-28 w-28 rounded-xl bg-muted"
+                                        resizeMode="cover"
+                                        accessibilityLabel={evidence.fileName || 'Existing evidence'}
+                                    />
+                                    <View className="absolute bottom-0 left-0 right-0 rounded-b-xl bg-black/50 px-1.5 py-1">
+                                        <Text className="text-[10px] text-white text-center" numberOfLines={1}>
+                                            {evidence.fileName || 'Evidence'}
+                                        </Text>
+                                    </View>
+                                </View>
+                            );
+                        })}
+                    </View>
+                </View>
+            ) : null}
+
+            {/* ── New evidence ─────────────────────────────────── */}
             <View className="mb-2 flex-row items-center justify-between">
                 <View className="flex-1">
                     <Text className="text-sm font-medium text-foreground">
-                        Waste evidence <Text className="text-destructive">*</Text>
+                        {existingEvidence.length > 0 ? 'Additional evidence' : 'Waste evidence'}{' '}
+                        <Text className="text-destructive">*</Text>
                     </Text>
                     <Text className="mt-1 text-xs text-muted-foreground">
-                        Add 1 to {MAX_EVIDENCE_IMAGES} clear images of the waste.
+                        {existingEvidence.length > 0
+                            ? `Add up to ${remainingSlots} more image${remainingSlots === 1 ? '' : 's'}.`
+                            : `Add 1 to ${MAX_EVIDENCE_IMAGES} clear images of the waste.`}
                     </Text>
                 </View>
                 <View className="ml-3 rounded-full bg-muted px-2.5 py-1">
                     <Text className="text-xs font-medium text-muted-foreground">
-                        {evidenceUris.length}/{MAX_EVIDENCE_IMAGES}
+                        {totalEvidenceCount}/{MAX_EVIDENCE_IMAGES}
                     </Text>
                 </View>
             </View>
 
             <View className="mt-3 flex-row flex-wrap gap-3">
-                {evidenceUris.map((uri, index) => (
+                {newEvidenceUris.map((uri, index) => (
                     <View key={`${uri}-${index}`} className="relative">
                         <Image
                             source={{ uri }}
                             className="h-28 w-28 rounded-xl bg-muted"
                             resizeMode="cover"
-                            accessibilityLabel={`Waste evidence image ${index + 1}`}
+                            accessibilityLabel={`New evidence image ${index + 1}`}
                         />
                         <Pressable
-                            onPress={() => removeEvidence(index)}
+                            onPress={() => removeNewEvidence(index)}
                             accessibilityRole="button"
-                            accessibilityLabel={`Remove evidence image ${index + 1}`}
+                            accessibilityLabel={`Remove new evidence image ${index + 1}`}
                             className="absolute -right-2 -top-2 h-8 w-8 items-center justify-center rounded-full bg-destructive shadow"
                         >
                             <Trash2 size={15} color="white" />
@@ -1129,7 +1292,7 @@ export default function NewPermitScreen() {
                     </View>
                 ))}
 
-                {evidenceUris.length < MAX_EVIDENCE_IMAGES ? (
+                {remainingSlots > 0 ? (
                     <Pressable
                         onPress={showEvidenceSource}
                         accessibilityRole="button"
@@ -1155,7 +1318,7 @@ export default function NewPermitScreen() {
                 <View className="flex-row items-start">
                     <Info size={18} color="#A16207" />
                     <Text className="ml-2 flex-1 text-sm leading-5 text-amber-800 dark:text-amber-300">
-                        Verify the pickup, waste and transport details before submission. At least one waste evidence image is required.
+                        Verify the pickup, waste and transport details before submission. At least one waste evidence image is required to submit.
                     </Text>
                 </View>
             </View>
@@ -1173,6 +1336,7 @@ export default function NewPermitScreen() {
         </View>
     );
 
+    // ── Main render ────────────────────────────────────────────────
     return (
         <SafeAreaView className="flex-1 bg-background" edges={['top', 'left', 'right']}>
             <View className="flex-row items-center bg-primary px-4 py-3">
@@ -1186,9 +1350,9 @@ export default function NewPermitScreen() {
                     <ArrowLeft size={22} color="white" />
                 </Pressable>
                 <View className="flex-1">
-                    <Text className="text-lg font-bold text-white">Create permit</Text>
+                    <Text className="text-lg font-bold text-white">Edit draft permit</Text>
                     <Text className="text-xs text-white/80">
-                        {isCompanyUser ? 'Project-based application' : 'Waste pickup application'}
+                        {permit.permitNumber || 'Update and submit'}
                     </Text>
                 </View>
             </View>
@@ -1278,13 +1442,17 @@ export default function NewPermitScreen() {
                                     className="mb-3 w-full"
                                 />
                                 <Button
-                                    label={
-                                        pendingPermitId
-                                            ? 'Retry submission'
-                                            : 'Submit permit'
-                                    }
-                                    onPress={() => void submitForm()}
-                                    loading={busy}
+                                    label="Save changes"
+                                    variant="outline"
+                                    onPress={() => void handleSaveChanges()}
+                                    loading={updatePermit.isPending && !submitPermit.isPending}
+                                    disabled={busy}
+                                    className="mb-3 w-full"
+                                />
+                                <Button
+                                    label="Submit permit"
+                                    onPress={() => void handleSubmitPermit()}
+                                    loading={submitPermit.isPending}
                                     disabled={busy}
                                     className="w-full"
                                 />
