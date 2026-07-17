@@ -103,23 +103,23 @@ export function resolveEvidenceFileUrl(pathOrUrl: string | null | undefined): st
 
 const getTimeLeftWithDetails = (verification: any) => {
     if (!verification?.timeRemaining) return null;
-    
+
     const timeLeft = verification.timeRemaining;
     const validFrom = verification.permit?.validFrom;
     const validUntil = verification.permit?.validUntil;
-    
+
     // Calculate percentage
     let percentage = 100;
     let days = 0;
     let hours = timeLeft.hours || 0;
     let minutes = timeLeft.minutes || 0;
     let text = timeLeft.text || 'Expired';
-    
+
     if (validFrom && validUntil) {
         const start = new Date(validFrom).getTime();
         const end = new Date(validUntil).getTime();
         const now = Date.now();
-        
+
         if (now < start) {
             percentage = 100;
         } else if (now > end) {
@@ -130,12 +130,12 @@ const getTimeLeftWithDetails = (verification: any) => {
             const elapsed = now - start;
             const remaining = total - elapsed;
             percentage = Math.round((remaining / total) * 100);
-            
+
             // Calculate days, hours, minutes
             days = Math.floor(remaining / (1000 * 60 * 60 * 24));
             hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
             minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-            
+
             // Format text
             if (days > 0) {
                 text = `${days}d ${hours}h ${minutes}m`;
@@ -146,7 +146,7 @@ const getTimeLeftWithDetails = (verification: any) => {
             }
         }
     }
-    
+
     return {
         text,
         hours,
@@ -158,11 +158,11 @@ const getTimeLeftWithDetails = (verification: any) => {
 
 export const calculateTimeLeft = (validFrom: string | null | undefined, validUntil: string | null | undefined) => {
     if (!validFrom || !validUntil) return null;
-    
+
     const start = new Date(validFrom).getTime();
     const end = new Date(validUntil).getTime();
     const now = Date.now();
-    
+
     if (now > end) {
         return {
             text: 'Expired',
@@ -172,16 +172,16 @@ export const calculateTimeLeft = (validFrom: string | null | undefined, validUnt
             percentage: 0,
         };
     }
-    
+
     const total = end - start;
     const elapsed = now - start;
     const remaining = total - elapsed;
     const percentage = Math.round((remaining / total) * 100);
-    
+
     const days = Math.floor(remaining / (1000 * 60 * 60 * 24));
     const hours = Math.floor((remaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-    
+
     let text = '';
     if (days > 0) {
         text = `${days}d ${hours}h ${minutes}m`;
@@ -190,7 +190,7 @@ export const calculateTimeLeft = (validFrom: string | null | undefined, validUnt
     } else {
         text = `${minutes}m`;
     }
-    
+
     return {
         text,
         days,
