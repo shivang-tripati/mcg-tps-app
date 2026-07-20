@@ -13,14 +13,14 @@ export default function CompaniesLayout() {
                 name="index"
                 options={{
                     title: 'Companies',
-                    headerShown: true,
+                    headerShown: false, // Hide header for the main companies list
                 }}
             />
             <Stack.Screen
                 name="[id]"
                 options={{
                     title: 'Company Details',
-                    headerShown: true,
+                    headerShown: false,
                 }}
             />
         </Stack>

@@ -73,13 +73,13 @@ export const useOnboarding = create<OnboardingState>()(
                 } catch (error) {
                     console.error('Individual onboarding check failed:', error);
                     set({ isChecking: false });
-                    
+
                     // ✅ Call error callback if set
                     const onError = get().onOnboardingError;
                     if (onError) {
                         onError(error as Error);
                     }
-                    
+
                     throw error;
                 }
             },
@@ -87,7 +87,7 @@ export const useOnboarding = create<OnboardingState>()(
             handleCompanyOnboarding: async (user: { role: string; companyId?: string | null }) => {
                 const hasCompany = !!user.companyId;
                 console.log('Has company:', hasCompany, 'Company ID:', user.companyId);
-                
+
                 let hasProject = false;
                 let projects: any[] = [];
 
@@ -98,11 +98,11 @@ export const useOnboarding = create<OnboardingState>()(
                         projects = resp.data.data || [];
                         hasProject = projects.length > 0;
                         console.log('Projects found:', projects.length);
-                        
+
                         set({ cachedProjects: projects });
                     } catch (error: any) {
                         console.error('Error fetching projects:', error);
-                        
+
                         if (isNetworkError(error)) {
                             console.log('Network error fetching projects - using cache if available');
                             const cached = get().cachedProjects;
@@ -165,9 +165,9 @@ export const useOnboarding = create<OnboardingState>()(
                         await get().handleCompanyOnboarding(user);
                     } else {
                         console.log('Admin or guest user - skipping onboarding');
-                        set({ 
-                            checked: true, 
-                            isOnboarded: true, 
+                        set({
+                            checked: true,
+                            isOnboarded: true,
                             isChecking: false,
                             lastCheckedAt: Date.now(),
                         });
@@ -187,9 +187,9 @@ export const useOnboarding = create<OnboardingState>()(
                             lastCheckedAt: Date.now(),
                         });
                     } else {
-                        set({ 
-                            checked: true, 
-                            isOnboarded: false, 
+                        set({
+                            checked: true,
+                            isOnboarded: false,
                             isChecking: false,
                             lastCheckedAt: Date.now(),
                         });
@@ -198,8 +198,8 @@ export const useOnboarding = create<OnboardingState>()(
             },
 
             refreshStatus: async (user: { role: string; companyId?: string | null }) => {
-                set({ 
-                    checked: false, 
+                set({
+                    checked: false,
                     isOnboarded: false,
                     cachedProjects: null,
                     lastCheckedAt: null,
@@ -220,16 +220,16 @@ export const useOnboarding = create<OnboardingState>()(
             },
 
             setCompanyCreated: (companyId: string) => {
-                set({ 
-                    hasCompany: true, 
+                set({
+                    hasCompany: true,
                     companyId,
                     lastCheckedAt: Date.now(),
                 });
             },
 
             setProjectCreated: () => {
-                set({ 
-                    hasProject: true, 
+                set({
+                    hasProject: true,
                     isOnboarded: true,
                     lastCheckedAt: Date.now(),
                 });

@@ -30,16 +30,16 @@ import { StatusBadge } from '../../../components/ui/status-badge';
 import { AxiosError } from 'axios';
 import { api } from '../../../lib/api';
 
-// ✅ Type guards
+
 function isAxiosError(error: unknown): error is AxiosError {
     return (error as AxiosError)?.isAxiosError === true;
 }
 
 function isNetworkError(error: unknown): boolean {
     if (isAxiosError(error)) {
-        return error.message === 'Network Error' || 
-               error.code === 'ECONNABORTED' ||
-               !error.response;
+        return error.message === 'Network Error' ||
+            error.code === 'ECONNABORTED' ||
+            !error.response;
     }
     return false;
 }
@@ -49,7 +49,7 @@ function getErrorMessage(error: unknown): string {
         if (isNetworkError(error)) {
             return 'Unable to connect to the server. Please check your network.';
         }
-        
+
         const responseData = error.response?.data as any;
         if (responseData) {
             if (responseData.error?.message) {
@@ -62,7 +62,7 @@ function getErrorMessage(error: unknown): string {
                 return responseData.data.message;
             }
         }
-        
+
         switch (error.response?.status) {
             case 400: return 'Invalid request. Please check your input.';
             case 401: return 'Your session has expired. Please log in again.';
@@ -73,11 +73,11 @@ function getErrorMessage(error: unknown): string {
             default: return error.message || 'An unexpected error occurred.';
         }
     }
-    
+
     if (error instanceof Error) {
         return error.message;
     }
-    
+
     return 'An unexpected error occurred.';
 }
 
@@ -115,7 +115,7 @@ export default function PermitsScreen() {
     const { user } = useAuth();
     const [retryCount, setRetryCount] = useState(0);
     const [errorType, setErrorType] = useState<'network' | 'server' | 'auth' | 'unknown' | null>(null);
-    
+
     // ✅ LOG: Component mount
     console.log('🔵 [PermitsScreen] Component mounted');
     console.log('🔵 [PermitsScreen] User:', {
@@ -125,11 +125,11 @@ export default function PermitsScreen() {
         companyId: user?.companyId,
     });
 
-    const { 
-        data, 
-        isPending, 
-        isError, 
-        isFetching, 
+    const {
+        data,
+        isPending,
+        isError,
+        isFetching,
         refetch,
         error,
         failureCount,
@@ -137,9 +137,9 @@ export default function PermitsScreen() {
     } = usePermits({ limit: 20 });
 
     useEffect(() => {
-    // Test the endpoint on mount
-    testPermitsEndpoint();
-}, []);
+        // Test the endpoint on mount
+        testPermitsEndpoint();
+    }, []);
 
     // ✅ LOG: Query status changes
     useEffect(() => {
@@ -195,15 +195,15 @@ export default function PermitsScreen() {
         if (isError && error) {
             const isNetworkErr = isNetworkError(error);
             const errorMessage = getErrorMessage(error);
-            
+
             console.log('🔴 [PermitsScreen] Error State:', {
                 isNetworkErr,
                 errorMessage,
                 errorType: isAxiosError(error) ? 'AxiosError' : typeof error,
             });
-            
+
             let type: 'network' | 'auth' | 'server' | 'unknown' = 'unknown';
-            
+
             if (isNetworkErr) {
                 type = 'network';
             } else if (isAxiosError(error)) {
@@ -215,7 +215,7 @@ export default function PermitsScreen() {
                 }
                 console.log('🔴 [PermitsScreen] HTTP Status:', status);
             }
-            
+
             setErrorType(type);
 
             Toast.show({
@@ -234,17 +234,17 @@ export default function PermitsScreen() {
     const handleRefresh = async () => {
         console.log('🔄 [PermitsScreen] Manual refresh triggered');
         console.log('🔄 [PermitsScreen] Retry count:', retryCount + 1);
-        
+
         try {
             setRetryCount(prev => prev + 1);
             const result = await refetch();
-            
+
             console.log('🔄 [PermitsScreen] Refresh result:', {
                 isSuccess: !result.isError,
                 isError: result.isError,
                 dataCount: result.data?.data?.length ?? 0,
             });
-            
+
             if (!result.isError) {
                 Toast.show({
                     type: 'success',
@@ -267,7 +267,7 @@ export default function PermitsScreen() {
             userRole: user?.role,
             isAdmin: user?.role === 'ADMIN',
         });
-        
+
         if (user?.role === 'ADMIN') {
             const route = `/(admin)/permits/${permitId}`;
             console.log('📱 [PermitsScreen] Navigating to admin route:', route);
@@ -374,15 +374,15 @@ export default function PermitsScreen() {
         const isNetworkErr = errorType === 'network';
         const isAuthErr = errorType === 'auth';
         const isServerErr = errorType === 'server';
-        
+
         const ErrorIcon = isNetworkErr ? LucideWifiOff : isAuthErr ? LucideAlertCircle : LucideInbox;
-        const errorMessage = isNetworkErr 
+        const errorMessage = isNetworkErr
             ? 'Please check your internet connection and try again.'
-            : isAuthErr 
-            ? 'Your session may have expired. Please log in again.'
-            : isServerErr
-            ? 'The server is experiencing issues. Please try again later.'
-            : 'Something went wrong. Please try again.';
+            : isAuthErr
+                ? 'Your session may have expired. Please log in again.'
+                : isServerErr
+                    ? 'The server is experiencing issues. Please try again later.'
+                    : 'Something went wrong. Please try again.';
 
         console.log('❌ [PermitsScreen] Rendering error state:', {
             isNetworkErr,
@@ -396,10 +396,10 @@ export default function PermitsScreen() {
             <SafeAreaView className="flex-1 bg-background justify-center items-center px-8">
                 <ErrorIcon size={48} color={isNetworkErr ? '#f59e0b' : MUTED} />
                 <Text className="text-foreground text-lg font-semibold text-center mt-4">
-                    {isNetworkErr ? 'Connection Error' : 
-                     isAuthErr ? 'Authentication Error' :
-                     isServerErr ? 'Server Error' :
-                     'Couldn\'t load permits'}
+                    {isNetworkErr ? 'Connection Error' :
+                        isAuthErr ? 'Authentication Error' :
+                            isServerErr ? 'Server Error' :
+                                'Couldn\'t load permits'}
                 </Text>
                 <Text className="text-muted-foreground text-sm text-center mt-2 leading-5">
                     {errorMessage}
@@ -460,9 +460,9 @@ export default function PermitsScreen() {
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                             disabled={isFetching}
                         >
-                            <LucideRefreshCw 
-                                size={20} 
-                                color="white" 
+                            <LucideRefreshCw
+                                size={20}
+                                color="white"
                                 style={{ opacity: isFetching ? 0.5 : 1 }}
                             />
                         </TouchableOpacity>
@@ -489,7 +489,6 @@ export default function PermitsScreen() {
                     windowSize={5}
                     removeClippedSubviews={true}
                     keyExtractor={(item) => {
-                        console.log('🔑 [PermitsScreen] Key extracted:', item.id);
                         return item.id;
                     }}
                     refreshControl={
@@ -521,7 +520,6 @@ export default function PermitsScreen() {
                                     elevation: 4,
                                 }}
                                 onPress={() => {
-                                    console.log('➕ [PermitsScreen] Navigating to create permit from empty state');
                                     router.push('/permits/new' as const);
                                 }}
                                 activeOpacity={0.88}

@@ -1,10 +1,10 @@
-import { View, Text, TouchableOpacity, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, Linking, Platform } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useEffect, useRef, useState } from 'react';
-import { LucideEye, LucideEyeOff } from 'lucide-react-native';
+import { LucideEye, LucideEyeOff, LucideCheckSquare, LucideSquare } from 'lucide-react-native';
 import { useAuth } from '../../lib/auth-store';
 import { api } from '../../lib/api';
 import { Button } from '../../components/ui/button';
@@ -13,7 +13,17 @@ import { KeyboardAwareScreen } from '../../components/ui/keyboard-aware-screen';
 import { registerSchema } from '../../schemas/index';
 import { showToast } from '../../lib/toast';
 
-type RegisterFormData = z.infer<typeof registerSchema>;
+// ✅ Extend the register schema to include agreements
+const registerWithAgreementSchema = registerSchema.extend({
+    agreeToTerms: z.boolean().refine(val => val === true, {
+        message: 'You must agree to the Terms of Service and Privacy Policy',
+    }),
+    agreeToCompliance: z.boolean().refine(val => val === true, {
+        message: 'You must acknowledge the compliance requirements',
+    }),
+});
+
+type RegisterFormData = z.infer<typeof registerWithAgreementSchema>;
 
 const ROLE_OPTIONS = [
     { key: 'INDIVIDUAL' as const, label: 'Individual', description: 'Personal waste disposal permits' },
@@ -32,22 +42,26 @@ export default function RegisterScreen() {
     const [showPassword, setShowPassword] = useState(false);
 
     const { control, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<RegisterFormData>({
-        resolver: zodResolver(registerSchema),
+        resolver: zodResolver(registerWithAgreementSchema),
         defaultValues: {
             name: '',
             email: '',
             password: '',
             phone: '',
             role: 'INDIVIDUAL',
+            agreeToTerms: false,
+            agreeToCompliance: false,
         },
     });
 
-    const selectedRole = watch('role');
+    const agreeToTerms = watch('agreeToTerms');
+    const agreeToCompliance = watch('agreeToCompliance');
+    const allAgreementsChecked = agreeToTerms && agreeToCompliance;
 
     const onSubmit = async (data: RegisterFormData) => {
         setError(null);
         setIsLoading(true);
-        
+
         try {
             const payload: any = {
                 name: data.name,
@@ -63,69 +77,80 @@ export default function RegisterScreen() {
 
             if (response.data.success) {
                 const { accessToken, refreshToken, user } = response.data.data;
-                
-                // Show success toast
+
                 showToast.success(
                     'Account Created Successfully! 🎉',
                     `Welcome ${user.name}! Redirecting to setup...`
                 );
-                
-                // Auto-login the user
+
                 await login(accessToken, refreshToken, user);
-                
-                // The RootLayout will handle navigation
-            } else {
-                const message = response.data.error?.message || 'Registration failed';
-                setError(message);
-                showToast.error('Registration Failed', message);
             }
         } catch (err: any) {
             console.error('Registration error:', err);
-            
+
             let message = 'Registration failed. Please try again.';
-            let description = '';
-            
-            if (err.response?.data) {
-                const errorData = err.response.data;
-                if (errorData.error?.message) {
-                    message = errorData.error.message;
-                    description = errorData.error.details || 'Please check your information and try again';
-                } else if (errorData.message) {
-                    message = errorData.message;
-                }
-            } else if (err.message) {
-                if (err.message === 'Network Error' || err.code === 'ECONNABORTED') {
-                    message = 'Network Error';
-                    description = 'Please check your internet connection';
-                } else {
-                    message = 'Registration Failed';
-                    description = err.message;
-                }
+
+            if (err.response?.status === 409) {
+                message = err.response?.data?.error?.message || 'User already exists. Please try logging in.';
+                showToast.error('Account Already Exists', message);
+            } else if (err.response?.data?.error?.message) {
+                message = err.response.data.error.message;
+                showToast.error('Registration Failed', message);
+            } else if (err.message === 'Network Error' || err.code === 'ECONNABORTED') {
+                message = 'Network Error. Please check your internet connection.';
+                showToast.error('Network Error', message);
+            } else {
+                showToast.error('Registration Failed', err.message || 'Please try again');
             }
-            
+
             setError(message);
-            showToast.error(message, description);
         } finally {
             setIsLoading(false);
         }
     };
 
-    // Cleanup on unmount
+    // ✅ Cleanup on unmount
     useEffect(() => {
         return () => {
             clearNewRegistration();
         };
     }, []);
 
+    // ✅ Helper to open links in browser
+    const openLink = async (path: string) => {
+        try {
+            const websiteUrl = process.env.EXPO_PUBLIC_WEBSITE_URL;
+
+            if (!websiteUrl) {
+                showToast.error('Error', 'Website URL is not configured');
+                return;
+            }
+
+            const baseUrl = websiteUrl.replace(/\/+$/, '');
+            const cleanPath = path.startsWith('/') ? path : `/${path}`;
+            const fullUrl = `${baseUrl}${cleanPath}`;
+
+            const supported = await Linking.canOpenURL(fullUrl);
+
+            if (supported) {
+                await Linking.openURL(fullUrl);
+            } else {
+                showToast.error('Error', 'Cannot open the link. Please try again.');
+            }
+        } catch (error) {
+            console.error('Failed to open link:', error);
+            showToast.error('Error', 'Could not open the link. Please try again.');
+        }
+    };
+
     return (
         <KeyboardAwareScreen className="flex-1 bg-background" scrollable>
-            <View className="flex-1 px-6 justify-center">
-                <View className="mb-6 mt-8">
+            <View className="flex-1 px-6 justify-center py-8">
+                <View className="mb-6">
                     <Text className="text-3xl font-bold text-primary mb-2">Create Account</Text>
                     <Text className="text-muted-foreground">Join MCG to manage your permits</Text>
                 </View>
 
-                {/* Remove error display - now using toasts */}
                 <View className="space-y-4">
                     <Controller
                         control={control}
@@ -202,7 +227,7 @@ export default function RegisterScreen() {
                                 secureTextEntry={!showPassword}
                                 returnKeyType="done"
                                 rightElement={
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         onPress={() => setShowPassword(!showPassword)}
                                         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                                     >
@@ -218,7 +243,7 @@ export default function RegisterScreen() {
                     />
 
                     {/* Role Selection */}
-                    <View className="mb-4">
+                    <View className="mb-2">
                         <Text className="text-sm font-medium text-foreground mb-2">Account Type</Text>
                         <Controller
                             control={control}
@@ -228,30 +253,27 @@ export default function RegisterScreen() {
                                     {ROLE_OPTIONS.map((role) => (
                                         <TouchableOpacity
                                             key={role.key}
-                                            className={`p-4 rounded-lg border ${
-                                                value === role.key
+                                            className={`p-4 rounded-lg border ${value === role.key
                                                     ? 'border-primary bg-primary/5'
                                                     : 'border-input bg-background'
-                                            }`}
+                                                }`}
                                             onPress={() => onChange(role.key)}
                                             activeOpacity={0.7}
                                         >
                                             <View className="flex-row items-center">
                                                 <View
-                                                    className={`w-5 h-5 rounded-full border-2 items-center justify-center mr-3 ${
-                                                        value === role.key
+                                                    className={`w-5 h-5 rounded-full border-2 items-center justify-center mr-3 ${value === role.key
                                                             ? 'border-primary'
                                                             : 'border-input'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {value === role.key && (
                                                         <View className="w-3 h-3 rounded-full bg-primary" />
                                                     )}
                                                 </View>
                                                 <View className="flex-1">
-                                                    <Text className={`text-base font-semibold ${
-                                                        value === role.key ? 'text-primary' : 'text-foreground'
-                                                    }`}>
+                                                    <Text className={`text-base font-semibold ${value === role.key ? 'text-primary' : 'text-foreground'
+                                                        }`}>
                                                         {role.label}
                                                     </Text>
                                                     <Text className="text-xs text-muted-foreground mt-0.5">
@@ -269,21 +291,106 @@ export default function RegisterScreen() {
                         )}
                     </View>
 
+                    {/* Terms and Agreements Section */}
+                    <View className="mt-2 pt-2 border-t border-border">
+                        <Text className="text-sm font-medium text-foreground mb-3">
+                            Agreements
+                        </Text>
+
+                        {/* Terms of Service & Privacy Policy */}
+                        <Controller
+                            control={control}
+                            name="agreeToTerms"
+                            render={({ field: { onChange, value } }) => (
+                                <TouchableOpacity
+                                    className="flex-row items-start mb-3"
+                                    onPress={() => onChange(!value)}
+                                    activeOpacity={0.7}
+                                >
+                                    {value ? (
+                                        <LucideCheckSquare size={22} color="#7c3aed" />
+                                    ) : (
+                                        <LucideSquare size={22} color="#9ca3af" />
+                                    )}
+                                    <View className="ml-3 flex-1">
+                                        <Text className="text-sm text-foreground">
+                                            I agree to the{' '}
+                                            <Text
+                                                className="text-primary font-semibold"
+                                                onPress={() => openLink('/terms-of-service')}
+                                            >
+                                                Terms of Service
+                                            </Text>
+                                            {' and '}
+                                            <Text
+                                                className="text-primary font-semibold"
+                                                onPress={() => openLink('/privacy-policy')}
+                                            >
+                                                Privacy Policy
+                                            </Text>
+                                        </Text>
+                                        {errors.agreeToTerms && (
+                                            <Text className="text-xs text-error mt-1">
+                                                {errors.agreeToTerms.message}
+                                            </Text>
+                                        )}
+                                    </View>
+                                </TouchableOpacity>
+                            )}
+                        />
+
+                        {/* Compliance Requirements */}
+                        <Controller
+                            control={control}
+                            name="agreeToCompliance"
+                            render={({ field: { onChange, value } }) => (
+                                <TouchableOpacity
+                                    className="flex-row items-start"
+                                    onPress={() => onChange(!value)}
+                                    activeOpacity={0.7}
+                                >
+                                    {value ? (
+                                        <LucideCheckSquare size={22} color="#7c3aed" />
+                                    ) : (
+                                        <LucideSquare size={22} color="#9ca3af" />
+                                    )}
+                                    <View className="ml-3 flex-1">
+                                        <Text className="text-sm text-foreground">
+                                            I acknowledge the{' '}
+                                            <Text
+                                                className="text-primary font-semibold"
+                                                onPress={() => openLink('/compliance')}
+                                            >
+                                                Compliance Requirements
+                                            </Text>
+                                            {' for C&D waste management'}
+                                        </Text>
+                                        {errors.agreeToCompliance && (
+                                            <Text className="text-xs text-error mt-1">
+                                                {errors.agreeToCompliance.message}
+                                            </Text>
+                                        )}
+                                    </View>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    </View>
+
                     <Button
                         label={isSubmitting || isLoading ? "Creating Account..." : "Sign Up"}
                         onPress={handleSubmit(onSubmit)}
                         loading={isSubmitting || isLoading}
+                        disabled={!allAgreementsChecked}
                         className="mt-2"
                     />
                 </View>
 
-                <View className="mt-8 flex-row justify-center space-x-1 pb-6">
-                    <Text className="text-muted-foreground">Already have an account?</Text>
-                    <Link href="/login" asChild>
-                        <TouchableOpacity>
-                            <Text className="text-primary font-bold"> Sign In</Text>
-                        </TouchableOpacity>
-                    </Link>
+                {/* ✅ Back to Login link - Fixed routing */}
+                <View className="mt-6 flex-row justify-center items-center pb-4">
+                    <Text className="text-muted-foreground">Already have an account? </Text>
+                    <TouchableOpacity onPress={() => router.push('/login')}>
+                        <Text className="text-primary font-bold">Sign In</Text>
+                    </TouchableOpacity>
                 </View>
             </View>
         </KeyboardAwareScreen>

@@ -115,48 +115,55 @@ export interface AdminUser {
 // WEIGHMENT
 // ============================================================
 
+// In your types/admin.ts or types/weighments.ts
+
 export interface Weighment {
     id: string;
     weighmentNumber: string;
-    permitId: string;
-    plantId: string;
-    firstWeight?: number | null;
-    firstWeighmentAt?: string | null;
-    secondWeight?: number | null;
-    secondWeighmentAt?: string | null;
-    netWeight?: number | null;
-    fileUrl?: string | null;
     status: WeighmentStatus;
     paymentStatus: PaymentStatus;
-    paymentAmount?: number | null;
-    paymentMethod?: string | null;
-    paymentReference?: string | null;
-    approvedAt?: string | null;
-    paidAt?: string | null;
-    rejectionReason?: string | null;
-    notes?: string | null;
+    paymentAmount: number | null;
+    paymentMethod: string | null;
+    paymentReference: string | null;
+    firstWeight: number | null;
+    secondWeight: number | null;
+    netWeight: number | null;
+    firstWeighmentAt: string | null;
+    secondWeighmentAt: string | null;
+    fileUrl: string | null;
+    rejectionReason: string | null;
+    notes: string | null;
+    approvedAt: string | null;
+    paidAt: string | null;
     createdAt: string;
-    updatedAt: string;
-    weighedAt?: string | null;
-    // Relations
-    permit?: {
+    weighedAt: string | null;
+    // ✅ Add these missing properties
+    approvedBy: {
+        id: string;
+        name: string;
+    } | null;
+    paidBy: {
+        id: string;
+        name: string;
+    } | null;
+    permit: {
         id: string;
         permitNumber: string;
-        status: PermitStatus;
-        user?: {
-            id: string;
-            name: string;
-            email: string;
-        };
-        company?: {
-            id: string;
-            name: string;
-        } | null;
+        status: string;
+        wasteType: string;
+        driverName: string | null;
+        driverPhone: string | null;
+        vehicleNumber: string | null;
+        vehicleType: string | null;
+        user: { id: string; name: string; email: string };
+        project?: { id: string; name: string; address: string; city: string } | null;
     };
-    plant?: {
+    plant: {
         id: string;
         name: string;
         code: string;
+        address: string;
+        city: string;
     };
 }
 

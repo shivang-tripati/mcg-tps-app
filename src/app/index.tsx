@@ -2,34 +2,75 @@ import { View, Text, ScrollView, Pressable, ActivityIndicator } from 'react-nati
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
-import { Check, ChevronRight, User, Plus } from 'lucide-react-native'; 
+import { Check, ChevronRight, User, Plus } from 'lucide-react-native';
 
 import WasteTruckIllustration from '../../assets/illustrations/WasteTruckIllustration2.png';
 import { useAuth } from '../lib/auth-store';
 import { useOnboarding } from '../lib/onboarding-store';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { UserRole } from '../types/database';
 
 export default function LandingScreen() {
     const router = useRouter();
-    const { isAuthenticated, isLoading, user } = useAuth();
-    const { isOnboarded, checked } = useOnboarding();
+    const { isAuthenticated, isLoading, user, tokenValid } = useAuth();
+    const { isOnboarded, checked, isChecking } = useOnboarding();
     const [isRedirecting, setIsRedirecting] = useState(false);
-
+    const redirectAttempted = useRef(false);
 
     useEffect(() => {
-        // Don't redirect if still loading
-        if (isLoading) return;
+        // Don't redirect if still loading auth
+        if (isLoading) {
+            console.log('⏳ Auth still loading...');
+            return;
+        }
+
+        // Don't redirect if not authenticated
+        if (!isAuthenticated) {
+            console.log('❌ Not authenticated - showing landing page');
+            setIsRedirecting(false);
+            return;
+        }
+
+        // Wait for token validation
+        if (tokenValid === null) {
+            console.log('⏳ Token validation pending...');
+            return;
+        }
+
+        // Don't redirect if token is invalid
+        if (tokenValid === false) {
+            console.log('❌ Token invalid - showing landing page');
+            setIsRedirecting(false);
+            return;
+        }
 
         // Don't redirect if already redirecting
-        if (isRedirecting) return;
+        if (isRedirecting) {
+            console.log('⏳ Already redirecting...');
+            return;
+        }
 
-        // Check if user is authenticated
-        if (isAuthenticated && user) {
+        // Don't redirect if onboarding is still checking
+        if (isChecking) {
+            console.log('⏳ Onboarding check in progress...');
+            return;
+        }
+
+        // Don't redirect if already attempted
+        if (redirectAttempted.current) {
+            console.log('⏭️ Redirect already attempted');
+            return;
+        }
+
+        // Now we have a valid authenticated user with onboarding checked
+        if (user) {
+            console.log('🔄 Attempting redirect for user:', user.role);
             setIsRedirecting(true);
+            redirectAttempted.current = true;
 
             // Admin users go to admin panel
             if (user.role === UserRole.ADMIN) {
+                console.log('➡️ Redirecting to admin panel');
                 router.replace('/(admin)');
                 return;
             }
@@ -38,47 +79,70 @@ export default function LandingScreen() {
             if (checked) {
                 if (isOnboarded) {
                     // Fully onboarded - go to dashboard
+                    console.log('➡️ Redirecting to dashboard (onboarded)');
                     router.replace('/(tabs)/dashboard');
                 } else {
                     // Not onboarded - go to onboarding
-                    const route = user.role === UserRole.COMPANY_USER 
-                        ? '/(onboarding)/company' 
+                    const route = user.role === UserRole.COMPANY_USER
+                        ? '/(onboarding)/company'
                         : '/(onboarding)/individual';
+                    console.log('➡️ Redirecting to onboarding:', route);
                     router.replace(route);
                 }
+            } else {
+                // If checked is false, reset redirect and wait
+                console.log('⏳ Onboarding not checked yet, waiting...');
+                setIsRedirecting(false);
+                redirectAttempted.current = false;
             }
-            // If not checked, wait for onboarding check to complete
-            // The navigation guard in _layout.tsx will handle it
         }
-    }, [isAuthenticated, isLoading, user, checked, isOnboarded, isRedirecting, router]);
+    }, [isAuthenticated, isLoading, user, checked, isChecking, isOnboarded, tokenValid, isRedirecting, router]);
 
-    // ✅ Show loading while checking auth
-    if (isLoading || isRedirecting) {
+    // ✅ Show loading while checking auth or onboarding
+    if (isLoading || (isAuthenticated && tokenValid === null) || (isAuthenticated && isChecking)) {
         return (
             <SafeAreaView className="flex-1 items-center justify-center bg-background">
                 <ActivityIndicator size="large" color="#8F1D3F" />
-                <Text className="mt-4 text-muted-foreground">Loading...</Text>
+                <Text className="mt-4 text-muted-foreground">
+                    {isLoading ? 'Loading...' :
+                        tokenValid === null ? 'Verifying session...' :
+                            'Setting up your profile...'}
+                </Text>
             </SafeAreaView>
         );
     }
 
-    // ✅ If authenticated and not redirected yet (shouldn't happen, but as fallback)
-    if (isAuthenticated) {
-        return null; // Will be redirected by the useEffect
+    // ✅ If authenticated and redirecting, show loading
+    if (isRedirecting) {
+        return (
+            <SafeAreaView className="flex-1 items-center justify-center bg-background">
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground">Redirecting...</Text>
+            </SafeAreaView>
+        );
     }
 
+    // ✅ If authenticated but not redirected (shouldn't happen, but as fallback)
+    if (isAuthenticated && tokenValid === true) {
+        return (
+            <SafeAreaView className="flex-1 items-center justify-center bg-background">
+                <ActivityIndicator size="large" color="#8F1D3F" />
+                <Text className="mt-4 text-muted-foreground">Preparing your dashboard...</Text>
+            </SafeAreaView>
+        );
+    }
 
+    // ✅ Show landing page only when not authenticated
     return (
         <SafeAreaView className="flex-1 bg-background">
-            <ScrollView 
+            <ScrollView
                 contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
                 showsVerticalScrollIndicator={false}
             >
                 {/* 1. HERO IMAGE SECTION */}
-                {/* Matches the top half of the reference image */}
                 <View className="w-full h-72 px-4 pt-4">
-                    <Image 
-                        source={WasteTruckIllustration} 
+                    <Image
+                        source={WasteTruckIllustration}
                         style={{ width: '100%', height: '100%' }}
                         contentFit="contain"
                         accessibilityLabel="Construction site with waste truck and permit verification"
@@ -93,8 +157,7 @@ export default function LandingScreen() {
                     <Text className="text-lg text-foreground text-center mb-4">
                         Transport Permit & Verification System
                     </Text>
-                    
-                    {/* Decorative Separator (Leaf icon substitute) */}
+
                     <View className="w-6 h-1 bg-primary rounded-full mb-4 opacity-50" />
 
                     <Text className="text-base text-muted-foreground text-center leading-relaxed px-4">
@@ -104,7 +167,6 @@ export default function LandingScreen() {
 
                 {/* 3. "CONTINUE WITHOUT ACCOUNT" SECTION */}
                 <View className="px-6 mb-6">
-                    {/* Divider with Text */}
                     <View className="flex-row items-center mb-4">
                         <View className="flex-1 h-[1px] bg-border" />
                         <Text className="px-3 text-sm font-semibold text-foreground">
@@ -113,19 +175,16 @@ export default function LandingScreen() {
                         <View className="flex-1 h-[1px] bg-border" />
                     </View>
 
-                    {/* Custom Verify Permit Card (Matches reference image layout) */}
-                    <Pressable 
+                    <Pressable
                         onPress={() => router.push('/verify')}
                         className="flex-row items-center bg-card border border-border rounded-xl p-4 active:opacity-80"
                         accessibilityRole="button"
                         accessibilityHint="Opens permit verification"
                     >
-                        {/* Icon Circle */}
                         <View className="w-10 h-10 rounded-full bg-primary/10 items-center justify-center mr-4">
-                            <Check size={20} color="#9E2A46" /> 
+                            <Check size={20} color="#9E2A46" />
                         </View>
-                        
-                        {/* Text Content */}
+
                         <View className="flex-1">
                             <Text className="text-base font-bold text-foreground mb-0.5">
                                 Check Permit
@@ -135,14 +194,12 @@ export default function LandingScreen() {
                             </Text>
                         </View>
 
-                        {/* Chevron */}
                         <ChevronRight size={24} color="#9CA3AF" />
                     </Pressable>
                 </View>
 
                 {/* 4. "MANAGE PERMITS" SECTION */}
                 <View className="px-6 mb-8">
-                    {/* Divider with Text */}
                     <View className="flex-row items-center mb-4">
                         <View className="flex-1 h-[1px] bg-border" />
                         <Text className="px-3 text-sm font-semibold text-foreground">
@@ -151,9 +208,8 @@ export default function LandingScreen() {
                         <View className="flex-1 h-[1px] bg-border" />
                     </View>
 
-                    {/* Side-by-Side Buttons */}
                     <View className="flex-row gap-3">
-                        <Pressable 
+                        <Pressable
                             onPress={() => router.push('/(auth)/login')}
                             className="flex-1 flex-row items-center justify-center h-12 rounded-xl border border-border bg-card active:opacity-80"
                             accessibilityRole="button"
@@ -163,7 +219,7 @@ export default function LandingScreen() {
                             <Text className="font-semibold text-foreground">Sign In</Text>
                         </Pressable>
 
-                        <Pressable 
+                        <Pressable
                             onPress={() => router.push('/(auth)/register')}
                             className="flex-1 flex-row items-center justify-center h-12 rounded-xl border border-border bg-card active:opacity-80"
                             accessibilityRole="button"

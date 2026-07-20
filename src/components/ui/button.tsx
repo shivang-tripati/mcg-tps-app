@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, GestureResponderEvent } from 'react-native';
+import { TouchableOpacity, Text, ActivityIndicator, GestureResponderEvent, View } from 'react-native';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -85,6 +85,11 @@ export function Button({
         }
     }, [disabled, loading, onPress]);
 
+    // ✅ Get text color for label
+    const textColor = (variant === 'outline' || variant === 'ghost' || variant === 'link' || variant === 'secondary')
+        ? 'text-foreground'
+        : 'text-primary-foreground';
+
     return (
         <TouchableOpacity
             className={cn(buttonVariants({ variant, size, className }), (disabled || loading) && "opacity-50")}
@@ -100,7 +105,14 @@ export function Button({
             {loading ? (
                 <ActivityIndicator color={loaderColor} />
             ) : (
-                children || <Text className={cn(textVariants({ variant }))}>{label}</Text>
+                <View className="flex-row items-center justify-center gap-2">
+                    {children}
+                    {label && (
+                        <Text className={cn(textVariants({ variant }), children ? 'ml-1' : '')}>
+                            {label}
+                        </Text>
+                    )}
+                </View>
             )}
         </TouchableOpacity>
     );

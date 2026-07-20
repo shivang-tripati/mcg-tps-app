@@ -10,8 +10,10 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
-import { LucideUploadCloud, LucideCamera, LucideFile, LucideX, LucideCheck, LucideFolderOpen } from 'lucide-react-native';
+import { LucideUploadCloud, LucideCamera, LucideFile, LucideX, LucideCheck } from 'lucide-react-native';
 import { api, UPLOAD_FILE_PATH } from '../../lib/api';
+import { SecureStorage } from '../../lib/storage';
+import { AUTH_TOKEN_KEY } from '../../lib/storage';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
@@ -20,25 +22,17 @@ export interface UploadedFile {
     name: string;
     type: string;
     size: number;
-    serverPath?: string; // Path returned from the upload API
+    serverPath?: string;
 }
 
 interface FileUploadProps {
-    /** Label displayed above the upload area */
     label?: string;
-    /** Called when a file is successfully uploaded to the server */
     onUpload?: (file: UploadedFile) => void;
-    /** Called when the file is removed */
     onRemove?: () => void;
-    /** An already-uploaded file to display as the initial state */
     initialFile?: UploadedFile | null;
-    /** Accepted MIME types */
     accept?: string[];
-    /** Error message to display */
     error?: string;
-    /** Disable the upload area */
     disabled?: boolean;
-    /** Allow multiple file types */
     allowMultiple?: boolean;
 }
 
@@ -56,7 +50,6 @@ export function FileUpload({
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
 
-    // Check if file type is allowed
     const isFileTypeAllowed = (mimeType: string): boolean => {
         if (accept.includes('*/*')) return true;
         return accept.some(accepted => {
@@ -68,7 +61,6 @@ export function FileUpload({
         });
     };
 
-    // Pick from gallery (images only)
     const pickFromGallery = useCallback(async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -87,7 +79,6 @@ export function FileUpload({
         }
     }, []);
 
-    // Pick from camera (images only)
     const pickFromCamera = useCallback(async () => {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== 'granted') {
@@ -105,10 +96,8 @@ export function FileUpload({
         }
     }, []);
 
-    // Pick from documents (PDF, Word, etc.)
     const pickFromDocuments = useCallback(async () => {
         try {
-            // Request permissions for Android
             if (Platform.OS === 'android') {
                 const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
                 if (status !== 'granted') {
@@ -128,14 +117,10 @@ export function FileUpload({
             }
 
             const assets = result.assets || [];
-            
-            // Handle single or multiple files
+
             if (assets.length > 0) {
-                // For now, handle only the first file
-                // If you need multiple files, you'll need to modify the state to handle arrays
                 const asset = assets[0];
-                
-                // Validate file type
+
                 if (!isFileTypeAllowed(asset.mimeType || '')) {
                     Alert.alert(
                         'Invalid File Type',
@@ -144,7 +129,6 @@ export function FileUpload({
                     return;
                 }
 
-                // Validate file size
                 const fileSize = asset.size || 0;
                 if (fileSize > MAX_FILE_SIZE) {
                     Alert.alert('File Too Large', 'File must be under 5 MB.');
@@ -193,43 +177,119 @@ export function FileUpload({
         setProgress(0);
 
         try {
+            const baseURL = api.defaults.baseURL?.replace(/\/+$/, '');
+
+            if (!baseURL) {
+                throw new Error('API base URL is not configured.');
+            }
+
+            const uploadPath = UPLOAD_FILE_PATH.replace(/^\/+/, '');
+            const uploadUrl = `${baseURL}/${uploadPath}`;
+
+            const accessToken = await SecureStorage.getItem(AUTH_TOKEN_KEY);
+
+            if (!accessToken) {
+                throw new Error('Authentication token is missing. Please log in again.');
+            }
+
+            if (fileToUpload.size > MAX_FILE_SIZE) {
+                throw new Error('The selected file exceeds the 5MB upload limit.');
+            }
+
             const formData = new FormData();
-            
-            // For React Native, we need to append the file properly
-            const fileData: any = {
+
+            // ✅ Directly append the file as an object (React Native way)
+            // This works without creating a File object
+            formData.append('file', {
                 uri: fileToUpload.uri,
                 name: fileToUpload.name,
                 type: fileToUpload.type,
-            };
-            
-            formData.append('file', fileData);
+            } as any);
 
-            const response = await api.post(UPLOAD_FILE_PATH, formData, {
-                headers: { 
-                    'Content-Type': 'multipart/form-data',
-                },
-                onUploadProgress: (progressEvent) => {
-                    if (progressEvent.total) {
-                        const pct = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                        setProgress(pct);
-                    }
-                },
+            console.log('[FILE UPLOAD START]', {
+                uploadUrl,
+                uri: fileToUpload.uri,
+                fileName: fileToUpload.name,
+                fileSize: fileToUpload.size,
+                mimeType: fileToUpload.type,
             });
 
-            if (response.data.success) {
-                const serverPath = response.data.data?.filePath || 
-                                  response.data.data?.path || 
-                                  response.data.data?.url;
-                const uploaded: UploadedFile = { ...fileToUpload, serverPath };
-                setFile(uploaded);
-                onUpload?.(uploaded);
-            } else {
-                Alert.alert('Upload Failed', response.data.error?.message || 'Could not upload file.');
-                removeFile();
+            // ✅ Use fetch (not axios) - this works!
+            const uploadResponse = await fetch(uploadUrl, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${accessToken}`,
+                    'X-Client-Type': 'mobile',
+                },
+                body: formData,
+            });
+
+            const responseText = await uploadResponse.text();
+
+            console.log('[FILE UPLOAD RESPONSE]', {
+                status: uploadResponse.status,
+                ok: uploadResponse.ok,
+                responseText: responseText.substring(0, 200),
+            });
+
+            let uploadBody;
+            try {
+                uploadBody = responseText ? JSON.parse(responseText) : undefined;
+            } catch {
+                throw new Error(`Upload server returned an invalid response with status ${uploadResponse.status}.`);
             }
+
+            if (!uploadResponse.ok || !uploadBody?.success || !uploadBody.data) {
+                const message = uploadBody?.error?.message ||
+                    uploadBody?.message ||
+                    `File upload failed with status ${uploadResponse.status}`;
+                throw new Error(message);
+            }
+
+            const uploadedFile = uploadBody.data;
+
+            const serverPath = uploadedFile.filePath ||
+                uploadedFile.path ||
+                uploadedFile.url;
+
+            const uploaded: UploadedFile = {
+                ...fileToUpload,
+                serverPath,
+                name: uploadedFile.fileName || fileToUpload.name,
+                size: uploadedFile.size || fileToUpload.size,
+            };
+
+            setFile(uploaded);
+            onUpload?.(uploaded);
+
         } catch (err: any) {
-            console.error('Upload error:', err);
-            Alert.alert('Upload Error', err.response?.data?.error?.message || 'Failed to upload file.');
+            console.error('[FILE UPLOAD ERROR]', {
+                message: err.message,
+                stack: err.stack,
+            });
+
+            // Handle specific error cases
+            if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
+                Alert.alert(
+                    'Session Expired',
+                    'Your session has expired. Please log in again.',
+                    [
+                        {
+                            text: 'OK',
+                            onPress: () => {
+                                // Navigate to login
+                            }
+                        }
+                    ]
+                );
+            } else if (err.message?.includes('timeout') || err.message?.includes('slow')) {
+                Alert.alert('Upload Timeout', 'The upload took too long. Please try again with a smaller file.');
+            } else if (err.message?.includes('Network') || err.message?.includes('internet')) {
+                Alert.alert('Network Error', 'Please check your internet connection and try again.');
+            } else {
+                Alert.alert('Upload Error', err.message || 'Failed to upload file. Please try again.');
+            }
             removeFile();
         } finally {
             setUploading(false);
@@ -243,14 +303,12 @@ export function FileUpload({
     };
 
     const showPicker = () => {
-        // Build options based on what's accepted
         const options: any[] = [];
-        
-        // If images are accepted, show camera and gallery
+
         const acceptsImages = accept.some(a => a.startsWith('image/'));
-        const acceptsDocuments = accept.some(a => 
-            a.includes('pdf') || 
-            a.includes('document') || 
+        const acceptsDocuments = accept.some(a =>
+            a.includes('pdf') ||
+            a.includes('document') ||
             a.includes('word') ||
             a.includes('text')
         );
@@ -268,7 +326,6 @@ export function FileUpload({
             );
         }
 
-        // If no specific types, show all options
         if (options.length === 0) {
             options.push(
                 { text: 'Take Photo', onPress: pickFromCamera },
@@ -289,7 +346,6 @@ export function FileUpload({
             {label && <Text className="text-sm font-medium text-foreground mb-2">{label}</Text>}
 
             {file ? (
-                /* ───── File Preview ───── */
                 <View className="border border-border rounded-lg overflow-hidden bg-card">
                     {isImage && file.uri && (
                         <Image
@@ -334,7 +390,6 @@ export function FileUpload({
                         )}
                     </View>
 
-                    {/* Upload progress bar */}
                     {uploading && (
                         <View className="h-1 bg-muted">
                             <View
@@ -345,11 +400,9 @@ export function FileUpload({
                     )}
                 </View>
             ) : (
-                /* ───── Upload Area ───── */
                 <TouchableOpacity
-                    className={`border-2 border-dashed rounded-lg p-6 items-center justify-center ${
-                        error ? 'border-error' : 'border-border'
-                    } ${disabled ? 'opacity-50' : ''}`}
+                    className={`border-2 border-dashed rounded-lg p-6 items-center justify-center ${error ? 'border-error' : 'border-border'
+                        } ${disabled ? 'opacity-50' : ''}`}
                     onPress={showPicker}
                     disabled={disabled || uploading}
                     activeOpacity={0.7}

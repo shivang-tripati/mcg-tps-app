@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { api, getErrorMessage, isNetworkError } from '../lib/api';
 import {
@@ -53,6 +53,10 @@ function normalizeApiError(error: unknown, fallback: string) {
   return new Error(getErrorMessage(error) || fallback);
 }
 
+// ============================================================
+// QUERY HOOKS
+// ============================================================
+
 export function useWeighments(params: UseWeighmentsParams) {
   return useQuery<ApiResponse<WeighmentListItem[]>, Error>({
     queryKey: ['weighments', params],
@@ -90,3 +94,161 @@ export function useWeighment(id?: string) {
     },
   });
 }
+
+// ============================================================
+// MUTATION HOOKS FOR WEIGHMENT ACTIONS
+// ============================================================
+
+interface MarkPaidPayload {
+  paymentAmount: number;
+  paymentMethod?: string;
+  paymentReference: string;
+}
+
+interface RejectPayload {
+  reason: string;
+}
+
+/**
+ * Hook for recording a new weighment
+ */
+export function useRecordWeighment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: {
+      permitId: string;
+      plantId: string;
+      firstWeight?: number;
+      secondWeight?: number;
+      firstWeighmentAt?: string;
+      secondWeighmentAt?: string;
+      notes?: string;
+    }) => {
+      const response = await api.post<ApiResponse<any>>('/weighments', data);
+      return response.data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['weighments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-permit', variables.permitId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    },
+    onError: (error: any) => {
+      console.error('Record weighment error:', error);
+    },
+  });
+}
+
+/**
+ * Hook for marking a weighment as paid
+ */
+export function useMarkWeighmentPaid(weighmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: MarkPaidPayload) => {
+      const response = await api.post<ApiResponse<any>>(`/weighments/${weighmentId}/mark-paid`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['weighment', weighmentId] });
+      queryClient.invalidateQueries({ queryKey: ['weighments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
+    },
+    onError: (error: any) => {
+      console.error('Mark paid error:', error);
+    },
+  });
+}
+
+/**
+ * Hook for approving a weighment
+ */
+export function useApproveWeighment(weighmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.post<ApiResponse<any>>(`/weighments/${weighmentId}/approve`, {});
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['weighment', weighmentId] });
+      queryClient.invalidateQueries({ queryKey: ['weighments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    },
+    onError: (error: any) => {
+      console.error('Approve weighment error:', error);
+    },
+  });
+}
+
+/**
+ * Hook for rejecting a weighment
+ */
+export function useRejectWeighment(weighmentId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: RejectPayload) => {
+      const response = await api.post<ApiResponse<any>>(`/weighments/${weighmentId}/reject`, data);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['weighment', weighmentId] });
+      queryClient.invalidateQueries({ queryKey: ['weighments'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
+    },
+    onError: (error: any) => {
+      console.error('Reject weighment error:', error);
+    },
+  });
+}
+
+/**
+ * Combined hook for all weighment actions
+ */
+export function useWeighmentActions(weighmentId: string) {
+  const markPaid = useMarkWeighmentPaid(weighmentId);
+  const approve = useApproveWeighment(weighmentId);
+  const reject = useRejectWeighment(weighmentId);
+
+  return {
+    markPaid,
+    approve,
+    reject,
+  };
+}
+
+/**
+ * Hook for completing a permit (when weighment is approved)
+ */
+export function useCompletePermit() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (permitId: string) => {
+      const response = await api.post<ApiResponse<any>>(`/permits/${permitId}/complete`);
+      return response.data;
+    },
+    onSuccess: (_, permitId) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-permit', permitId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-permits'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    },
+    onError: (error: any) => {
+      console.error('Complete permit error:', error);
+    },
+  });
+}
+
+// ============================================================
+// EXPORT TYPES
+// ============================================================
+
+export type {
+  MarkPaidPayload,
+  RejectPayload,
+};

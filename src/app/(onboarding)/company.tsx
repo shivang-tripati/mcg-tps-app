@@ -15,33 +15,25 @@ import { useOnboarding } from '../../lib/onboarding-store';
 import { useAuth } from '../../lib/auth-store';
 import { createCompanySchema, createProjectSchema } from '../../schemas/index';
 
-/* ────────────────────────────────────────────
-   Schema for mobile company form (required fields adjusted)
-   ──────────────────────────────────────────── */
-const mobileCompanySchema = z.object({
-    name: z.string().min(2, 'Company name is required'),
-    gstNumber: z.string().optional(),
-    registrationNumber: z.string().optional(),
-    contactEmail: z.string().email('Invalid email').optional().or(z.literal('')),
-    contactPhone: z.string().optional(),
-    address: z.string().optional(),
-    city: z.string().min(2, 'City is required'),
-    state: z.string().min(2, 'State is required'),
-    pincode: z.string().regex(/^\d{6}$/, 'Pincode must be 6 digits'),
-});
+// ✅ Use the shared schemas directly
+type CompanyFormData = z.infer<typeof createCompanySchema>;
+type ProjectFormData = z.infer<typeof createProjectSchema>;
 
-const mobileProjectSchema = z.object({
-    name: z.string().min(2, 'Project name is required'),
-    address: z.string().min(5, 'Site address is required'),
+// ✅ For mobile, create a separate schema for the form with string lat/lng
+// This is only for the form - we'll convert when submitting
+const mobileProjectFormSchema = z.object({
+    name: z.string().min(2, 'Project name must be at least 2 characters'),
+    description: z.string().optional(),
+    address: z.string().min(5, 'Address is required'),
     city: z.string().min(2, 'City is required'),
     state: z.string().min(2, 'State is required'),
-    pincode: z.string().regex(/^\d{6}$/, 'Pincode must be 6 digits'),
+    pincode: z.string().regex(/^\d{6}$/, 'Enter a valid 6-digit PIN code'),
+    companyId: z.string().uuid('Invalid company ID').optional(),
     latitude: z.string().optional(),
     longitude: z.string().optional(),
 });
 
-type CompanyFormData = z.infer<typeof mobileCompanySchema>;
-type ProjectFormData = z.infer<typeof mobileProjectSchema>;
+type MobileProjectFormData = z.infer<typeof mobileProjectFormSchema>;
 
 const STEPS = [
     { number: 1, title: 'Company' },
@@ -73,9 +65,8 @@ export default function CompanyOnboardingScreen() {
     useEffect(() => {
         const backAction = () => {
             if (currentStep === 2) {
-                // Let user go back to step 1 (editing company)
                 setCurrentStep(1);
-                return true; // handled
+                return true;
             } else {
                 Alert.alert(
                     'Exit Onboarding?',
@@ -85,7 +76,7 @@ export default function CompanyOnboardingScreen() {
                         { text: 'Exit', onPress: () => BackHandler.exitApp() }
                     ]
                 );
-                return true; // handled
+                return true;
             }
         };
 
@@ -97,8 +88,7 @@ export default function CompanyOnboardingScreen() {
         return () => backHandler.remove();
     }, [currentStep]);
 
-    // If user already has a companyId (from auth), fetch the company
-    // to confirm it exists and skip directly to the project step
+    // If user already has a companyId, fetch the company
     useEffect(() => {
         const fetchExistingCompany = async (cId: string) => {
             setFetchingCompany(true);
@@ -113,41 +103,47 @@ export default function CompanyOnboardingScreen() {
                 }
             } catch (err: any) {
                 console.warn('Failed to fetch existing company:', err?.message);
-                // Company doesn't exist or API error — stay on step 1
             } finally {
                 setFetchingCompany(false);
             }
         };
 
-        // Check from onboarding store first
         if (hasCompany && companyId) {
             setCreatedCompanyId(companyId);
             fetchExistingCompany(companyId);
-        }
-        // Also check directly from user object (covers case where
-        // onboarding store hasn't been populated yet)
-        else if (user?.companyId && !hasCompany) {
+        } else if (user?.companyId && !hasCompany) {
             fetchExistingCompany(user.companyId);
         }
     }, [hasCompany, companyId, user?.companyId]);
 
     /* ──────────────── Company Form ──────────────── */
     const companyForm = useForm<CompanyFormData>({
-        resolver: zodResolver(mobileCompanySchema),
+        resolver: zodResolver(createCompanySchema),
+        mode: 'onChange',
         defaultValues: {
-            name: '', gstNumber: '', registrationNumber: '',
-            contactEmail: '', contactPhone: '', address: '',
-            city: '', state: '', pincode: '',
+            name: '',
+            registrationNumber: '',
+            gstNumber: '',
+            address: '',
+            city: '',
+            state: '',
+            pincode: '',
+            contactEmail: '',
+            contactPhone: '',
         },
     });
 
     const onSubmitCompany = async (data: CompanyFormData) => {
         try {
-            // Clean empty optional strings
-            const payload: any = { ...data };
-            for (const key of ['gstNumber', 'registrationNumber', 'contactEmail', 'contactPhone', 'address']) {
-                if (!payload[key] || payload[key].trim() === '') delete payload[key];
-            }
+            // ✅ Clean empty optional strings
+            const payload: any = {};
+
+            Object.keys(data).forEach((key) => {
+                const value = data[key as keyof CompanyFormData];
+                if (value && value !== '') {
+                    payload[key] = value;
+                }
+            });
 
             const response = await api.post('/onboarding/company', payload);
 
@@ -167,34 +163,62 @@ export default function CompanyOnboardingScreen() {
     };
 
     /* ──────────────── Project Form ──────────────── */
-    const projectForm = useForm<ProjectFormData>({
-        resolver: zodResolver(mobileProjectSchema),
+    // ✅ Use the mobile form schema with string lat/lng
+    const projectForm = useForm<MobileProjectFormData>({
+        resolver: zodResolver(mobileProjectFormSchema),
+        mode: 'onChange',
         defaultValues: {
-            name: '', address: '', city: '', state: '', pincode: '',
-            latitude: '', longitude: '',
+            name: '',
+            description: '',
+            address: '',
+            city: '',
+            state: '',
+            pincode: '',
+            latitude: '',
+            longitude: '',
+            companyId: createdCompanyId || '',
         },
     });
 
-    const onSubmitProject = async (data: ProjectFormData) => {
+    useEffect(() => {
+        if (createdCompanyId) {
+            projectForm.setValue('companyId', createdCompanyId);
+        }
+    }, [createdCompanyId]);
+
+    const onSubmitProject = async (data: MobileProjectFormData) => {
         if (!createdCompanyId) {
             Alert.alert('Error', 'Company ID is missing. Please go back and create a company first.');
             return;
         }
 
         try {
-            const { latitude: latStr, longitude: lngStr, ...rest } = data;
+            // ✅ Prepare payload with proper types for the API
             const payload: any = {
-                ...rest,
+                name: data.name,
+                address: data.address,
+                city: data.city,
+                state: data.state,
+                pincode: data.pincode,
                 companyId: createdCompanyId,
             };
-            // Convert lat/lng strings to numbers if provided
-            if (latStr && latStr.trim() !== '') {
-                const lat = parseFloat(latStr);
-                if (!isNaN(lat) && lat >= -90 && lat <= 90) payload.latitude = lat;
+
+            // ✅ Add optional fields if present
+            if (data.description) payload.description = data.description;
+
+            // ✅ Convert lat/lng from string to number
+            if (data.latitude && data.latitude.trim() !== '') {
+                const lat = parseFloat(data.latitude);
+                if (!isNaN(lat) && lat >= -90 && lat <= 90) {
+                    payload.latitude = lat;
+                }
             }
-            if (lngStr && lngStr.trim() !== '') {
-                const lng = parseFloat(lngStr);
-                if (!isNaN(lng) && lng >= -180 && lng <= 180) payload.longitude = lng;
+
+            if (data.longitude && data.longitude.trim() !== '') {
+                const lng = parseFloat(data.longitude);
+                if (!isNaN(lng) && lng >= -180 && lng <= 180) {
+                    payload.longitude = lng;
+                }
             }
 
             const response = await api.post('/projects', payload);
@@ -202,7 +226,7 @@ export default function CompanyOnboardingScreen() {
             if (response.data.success) {
                 setProjectCreated();
                 Alert.alert(
-                    'Setup Complete!',
+                    'Setup Complete! 🎉',
                     'Your company and project have been created successfully.',
                     [{ text: 'Continue', onPress: () => router.replace('/(tabs)/dashboard') }]
                 );
@@ -224,7 +248,6 @@ export default function CompanyOnboardingScreen() {
                 return;
             }
 
-            // Wrap getCurrentPositionAsync in a 10s timeout
             const positionPromise = Location.getCurrentPositionAsync({
                 accuracy: Location.Accuracy.Balanced,
             });
@@ -236,8 +259,15 @@ export default function CompanyOnboardingScreen() {
             const location = await Promise.race([positionPromise, timeoutPromise]);
 
             if (location && location.coords) {
+                // ✅ Set as strings for the form
                 projectForm.setValue('latitude', location.coords.latitude.toFixed(6));
                 projectForm.setValue('longitude', location.coords.longitude.toFixed(6));
+
+                Alert.alert(
+                    'Location Fetched',
+                    `Latitude: ${location.coords.latitude.toFixed(6)}\nLongitude: ${location.coords.longitude.toFixed(6)}`,
+                    [{ text: 'OK' }]
+                );
             } else {
                 throw new Error('Could not fetch location coordinates.');
             }
@@ -260,9 +290,12 @@ export default function CompanyOnboardingScreen() {
         );
     }
 
+    // ✅ Check if forms are valid
+    const isCompanyValid = companyForm.formState.isValid && !companyForm.formState.isSubmitting;
+    const isProjectValid = projectForm.formState.isValid && !projectForm.formState.isSubmitting;
+
     return (
-        <KeyboardAwareScreen className="flex-1 bg-background" scrollable >
-            {/* Step Indicator */}
+        <KeyboardAwareScreen className="flex-1 bg-background" scrollable>
             <StepIndicator steps={STEPS} currentStep={currentStep} />
 
             <View className="flex-1 px-6 pt-4 pb-8">
@@ -284,14 +317,14 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={companyForm.control}
                             name="name"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="Company Name *"
                                     placeholder="Enter company name"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value}
-                                    error={companyForm.formState.errors.name?.message}
+                                    error={error?.message}
                                 />
                             )}
                         />
@@ -299,15 +332,16 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={companyForm.control}
                             name="gstNumber"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="GST Number"
                                     placeholder="Enter GST number"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value || ''}
-                                    error={companyForm.formState.errors.gstNumber?.message}
+                                    error={error?.message}
                                     autoCapitalize="characters"
+                                    helperText="Optional"
                                 />
                             )}
                         />
@@ -315,14 +349,15 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={companyForm.control}
                             name="registrationNumber"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="Registration Number"
                                     placeholder="Enter registration number"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value || ''}
-                                    error={companyForm.formState.errors.registrationNumber?.message}
+                                    error={error?.message}
+                                    helperText="Optional"
                                 />
                             )}
                         />
@@ -330,16 +365,17 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={companyForm.control}
                             name="contactEmail"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="Contact Email"
                                     placeholder="company@example.com"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value || ''}
-                                    error={companyForm.formState.errors.contactEmail?.message}
+                                    error={error?.message}
                                     keyboardType="email-address"
                                     autoCapitalize="none"
+                                    helperText="Optional"
                                 />
                             )}
                         />
@@ -347,15 +383,16 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={companyForm.control}
                             name="contactPhone"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="Contact Phone"
                                     placeholder="+91XXXXXXXXXX"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value || ''}
-                                    error={companyForm.formState.errors.contactPhone?.message}
+                                    error={error?.message}
                                     keyboardType="phone-pad"
+                                    helperText="Optional"
                                 />
                             )}
                         />
@@ -363,31 +400,33 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={companyForm.control}
                             name="address"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
-                                    label="Address Line 1"
+                                    label="Address"
                                     placeholder="Enter address"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value || ''}
-                                    error={companyForm.formState.errors.address?.message}
+                                    error={error?.message}
+                                    helperText="Optional"
                                 />
                             )}
                         />
 
-                        <View className="flex-row space-x-2">
+                        <View className="flex-row gap-2">
                             <View className="flex-1">
                                 <Controller
                                     control={companyForm.control}
                                     name="city"
-                                    render={({ field: { onChange, onBlur, value } }) => (
+                                    render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                         <Input
-                                            label="City *"
+                                            label="City"
                                             placeholder="City"
                                             onBlur={onBlur}
                                             onChangeText={onChange}
-                                            value={value}
-                                            error={companyForm.formState.errors.city?.message}
+                                            value={value || ''}
+                                            error={error?.message}
+                                            helperText="Optional"
                                         />
                                     )}
                                 />
@@ -396,14 +435,15 @@ export default function CompanyOnboardingScreen() {
                                 <Controller
                                     control={companyForm.control}
                                     name="state"
-                                    render={({ field: { onChange, onBlur, value } }) => (
+                                    render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                         <Input
-                                            label="State *"
+                                            label="State"
                                             placeholder="State"
                                             onBlur={onBlur}
                                             onChangeText={onChange}
-                                            value={value}
-                                            error={companyForm.formState.errors.state?.message}
+                                            value={value || ''}
+                                            error={error?.message}
+                                            helperText="Optional"
                                         />
                                     )}
                                 />
@@ -413,16 +453,17 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={companyForm.control}
                             name="pincode"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
-                                    label="Pincode *"
+                                    label="Pincode"
                                     placeholder="6-digit pincode"
                                     onBlur={onBlur}
                                     onChangeText={(text) => onChange(text.replace(/\D/g, ''))}
-                                    value={value}
-                                    error={companyForm.formState.errors.pincode?.message}
+                                    value={value || ''}
+                                    error={error?.message}
                                     keyboardType="number-pad"
                                     maxLength={6}
+                                    helperText="Optional - enter a valid 6-digit PIN code if provided"
                                 />
                             )}
                         />
@@ -431,13 +472,13 @@ export default function CompanyOnboardingScreen() {
                             label={companyForm.formState.isSubmitting ? 'Creating Company…' : 'Create Company & Continue'}
                             onPress={companyForm.handleSubmit(onSubmitCompany)}
                             loading={companyForm.formState.isSubmitting}
+                            disabled={!isCompanyValid}
                             className="mt-4"
                         />
                     </View>
                 ) : (
                     /* ═══════════ Step 2: Project Form ═══════════ */
                     <View>
-                        {/* Company info banner when resuming after a failed project creation */}
                         {existingCompanyName && (
                             <View className="flex-row items-center bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-xl px-4 py-3 mb-4">
                                 <LucideCheckCircle2 size={20} color="#16a34a" />
@@ -467,14 +508,32 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={projectForm.control}
                             name="name"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="Project Name *"
                                     placeholder="Enter project name"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value}
-                                    error={projectForm.formState.errors.name?.message}
+                                    error={error?.message}
+                                />
+                            )}
+                        />
+
+                        <Controller
+                            control={projectForm.control}
+                            name="description"
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
+                                <Input
+                                    label="Project Description"
+                                    placeholder="Brief description of the project"
+                                    onBlur={onBlur}
+                                    onChangeText={onChange}
+                                    value={value || ''}
+                                    error={error?.message}
+                                    multiline
+                                    numberOfLines={3}
+                                    helperText="Optional"
                                 />
                             )}
                         />
@@ -482,31 +541,31 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={projectForm.control}
                             name="address"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="Site Address *"
                                     placeholder="Full site address"
                                     onBlur={onBlur}
                                     onChangeText={onChange}
                                     value={value}
-                                    error={projectForm.formState.errors.address?.message}
+                                    error={error?.message}
                                 />
                             )}
                         />
 
-                        <View className="flex-row space-x-2">
+                        <View className="flex-row gap-2">
                             <View className="flex-1">
                                 <Controller
                                     control={projectForm.control}
                                     name="city"
-                                    render={({ field: { onChange, onBlur, value } }) => (
+                                    render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                         <Input
                                             label="City *"
                                             placeholder="City"
                                             onBlur={onBlur}
                                             onChangeText={onChange}
                                             value={value}
-                                            error={projectForm.formState.errors.city?.message}
+                                            error={error?.message}
                                         />
                                     )}
                                 />
@@ -515,14 +574,14 @@ export default function CompanyOnboardingScreen() {
                                 <Controller
                                     control={projectForm.control}
                                     name="state"
-                                    render={({ field: { onChange, onBlur, value } }) => (
+                                    render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                         <Input
                                             label="State *"
                                             placeholder="State"
                                             onBlur={onBlur}
                                             onChangeText={onChange}
                                             value={value}
-                                            error={projectForm.formState.errors.state?.message}
+                                            error={error?.message}
                                         />
                                     )}
                                 />
@@ -532,35 +591,37 @@ export default function CompanyOnboardingScreen() {
                         <Controller
                             control={projectForm.control}
                             name="pincode"
-                            render={({ field: { onChange, onBlur, value } }) => (
+                            render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                 <Input
                                     label="Pincode *"
                                     placeholder="6-digit pincode"
                                     onBlur={onBlur}
                                     onChangeText={(text) => onChange(text.replace(/\D/g, ''))}
                                     value={value}
-                                    error={projectForm.formState.errors.pincode?.message}
+                                    error={error?.message}
                                     keyboardType="number-pad"
                                     maxLength={6}
+                                    helperText="Enter a valid 6-digit PIN code"
                                 />
                             )}
                         />
 
                         {/* Location fields */}
-                        <View className="flex-row space-x-2">
+                        <View className="flex-row gap-2">
                             <View className="flex-1">
                                 <Controller
                                     control={projectForm.control}
                                     name="latitude"
-                                    render={({ field: { onChange, onBlur, value } }) => (
+                                    render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                         <Input
                                             label="Latitude"
                                             placeholder="e.g. 28.4595"
                                             onBlur={onBlur}
                                             onChangeText={onChange}
                                             value={value || ''}
-                                            error={projectForm.formState.errors.latitude?.message}
+                                            error={error?.message}
                                             keyboardType="numeric"
+                                            helperText="Optional - between -90 and 90"
                                         />
                                     )}
                                 />
@@ -569,15 +630,16 @@ export default function CompanyOnboardingScreen() {
                                 <Controller
                                     control={projectForm.control}
                                     name="longitude"
-                                    render={({ field: { onChange, onBlur, value } }) => (
+                                    render={({ field: { onChange, onBlur, value }, fieldState: { error } }) => (
                                         <Input
                                             label="Longitude"
                                             placeholder="e.g. 77.0266"
                                             onBlur={onBlur}
                                             onChangeText={onChange}
                                             value={value || ''}
-                                            error={projectForm.formState.errors.longitude?.message}
+                                            error={error?.message}
                                             keyboardType="numeric"
+                                            helperText="Optional - between -180 and 180"
                                         />
                                     )}
                                 />
@@ -596,6 +658,7 @@ export default function CompanyOnboardingScreen() {
                             label={projectForm.formState.isSubmitting ? 'Creating Project…' : 'Create Project & Finish'}
                             onPress={projectForm.handleSubmit(onSubmitProject)}
                             loading={projectForm.formState.isSubmitting}
+                            disabled={!isProjectValid}
                             className="mt-2"
                         />
                     </View>

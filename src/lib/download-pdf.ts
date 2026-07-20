@@ -23,14 +23,18 @@ function getBaseUrl() {
 export function resolveDocumentUrl(fileUrl?: string | null) {
   if (!fileUrl) return null;
 
+  // Already a full external URL
   if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
     return fileUrl;
   }
 
   const baseUrl = getBaseUrl();
+
+  // Ensure leading slash
   const cleanPath = fileUrl.startsWith('/') ? fileUrl : `/${fileUrl}`;
 
-  return `${baseUrl}${cleanPath}`;
+  // Always prefix with /api/uploads
+  return `${baseUrl}/api${cleanPath}`;
 }
 
 export async function downloadWeighmentPdf(params: {
