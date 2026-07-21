@@ -17,8 +17,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.mfg.transportpermit",
       "associatedDomains": [
-        "applinks:yourdomain.com"
-      ]
+        "applinks:malbafreegurugram.com",
+        "applinks:malbafreegurugram.com"
+      ],
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
