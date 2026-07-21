@@ -199,7 +199,7 @@ export default function VerifyScreen() {
                 setError(null);
 
                 const scannedResults = await Camera.scanFromURLAsync(result.assets[0].uri, ['qr']);
-                
+
                 if (scannedResults && scannedResults.length > 0) {
                     setProcessingImage(false);
                     await processVerification(scannedResults[0].data);
@@ -297,550 +297,550 @@ export default function VerifyScreen() {
         return (
             <SafeAreaView className="flex-1" style={{ backgroundColor: '#f1f5f9' }}>
                 {/* ═══════════════════════════════════════ */}
-{/* HEADER - Enhanced with better hierarchy */}
-{/* ═══════════════════════════════════════ */}
-<View style={{
-    backgroundColor: '#8F1D3F',
-    paddingTop: Platform.OS === 'ios' ? 48 : 16,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-}}>
-    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-        <TouchableOpacity 
-            onPress={resetScanner} 
-            style={{ 
-                padding: 8,
-                marginRight: 12,
-                borderRadius: 12,
-                backgroundColor: 'rgba(255,255,255,0.15)',
-            }}
-            activeOpacity={0.7}
-        >
-            <LucideArrowLeft size={22} color="white" />
-        </TouchableOpacity>
-        
-        <View style={{ flex: 1 }}>
-            <Text style={{ 
-                color: 'white', 
-                fontSize: 20, 
-                fontWeight: '700',
-                letterSpacing: 0.3,
-            }}>
-                Verification Result
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                <View style={{ 
-                    width: 6, 
-                    height: 6, 
-                    borderRadius: 3, 
-                    backgroundColor: isActive ? '#4ade80' : '#fca5a5' 
-                }} />
-                <Text style={{ 
-                    color: 'rgba(255,255,255,0.7)', 
-                    fontSize: 12,
-                    fontWeight: '500',
-                }}>
-                    {isActive ? 'Active Permit' : 'Inactive Permit'}
-                </Text>
-                <Text style={{ 
-                    color: 'rgba(255,255,255,0.3)', 
-                    fontSize: 12,
-                }}>
-                    •
-                </Text>
-                <Text style={{ 
-                    color: 'rgba(255,255,255,0.5)', 
-                    fontSize: 12,
-                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                }}>
-                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-            </View>
-        </View>
-
-        {/* Optional: Quick action button */}
-        <TouchableOpacity 
-            style={{ 
-                padding: 8,
-                borderRadius: 12,
-                backgroundColor: 'rgba(255,255,255,0.1)',
-            }}
-            onPress={resetScanner}
-            activeOpacity={0.7}
-        >
-            <LucideScan size={20} color="rgba(255,255,255,0.8)" />
-        </TouchableOpacity>
-    </View>
-</View>
-
-{/* ═══════════════════════════════════════ */}
-{/* MAIN CONTENT */}
-{/* ═══════════════════════════════════════ */}
-<ScrollView 
-    className="flex-1" 
-    contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 16, paddingTop: 16 }}
-    showsVerticalScrollIndicator={false}
->
-    {error ? (
-        /* ─── Error State ─── */
-        <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 40 }}>
-            <View style={{
-                backgroundColor: 'white',
-                borderRadius: 20,
-                padding: 32,
-                alignItems: 'center',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.06,
-                shadowRadius: 16,
-                elevation: 4,
-            }}>
+                {/* HEADER - Enhanced with better hierarchy */}
+                {/* ═══════════════════════════════════════ */}
                 <View style={{
-                    backgroundColor: '#fee2e2',
-                    borderRadius: 60,
-                    padding: 20,
-                    marginBottom: 16,
+                    backgroundColor: '#8F1D3F',
+                    paddingTop: Platform.OS === 'ios' ? 48 : 16,
+                    paddingBottom: 16,
+                    paddingHorizontal: 20,
+                    borderBottomWidth: 1,
+                    borderBottomColor: 'rgba(255,255,255,0.1)',
                 }}>
-                    <LucideXCircle size={56} color="#dc2626" />
-                </View>
-                
-                <Text style={{ 
-                    fontSize: 24, 
-                    fontWeight: '700', 
-                    color: '#1e293b',
-                    marginBottom: 4,
-                }}>
-                    Verification Failed
-                </Text>
-                
-                <View style={{
-                    backgroundColor: '#fee2e2',
-                    paddingHorizontal: 16,
-                    paddingVertical: 6,
-                    borderRadius: 20,
-                    marginBottom: 12,
-                }}>
-                    <Text style={{ 
-                        color: '#dc2626', 
-                        fontSize: 10, 
-                        fontWeight: '700',
-                        letterSpacing: 1.5,
-                    }}>
-                        ERROR
-                    </Text>
-                </View>
-                
-                <Text style={{ 
-                    color: '#64748b', 
-                    textAlign: 'center',
-                    lineHeight: 22,
-                    marginBottom: 24,
-                }}>
-                    {error}
-                </Text>
-                
-                <TouchableOpacity
-                    style={{
-                        backgroundColor: '#dc2626',
-                        paddingVertical: 14,
-                        paddingHorizontal: 32,
-                        borderRadius: 12,
-                        width: '100%',
-                        alignItems: 'center',
-                        flexDirection: 'row',
-                        justifyContent: 'center',
-                        gap: 8,
-                    }}
-                    onPress={resetScanner}
-                    activeOpacity={0.8}
-                >
-                    <LucideArrowLeft size={18} color="white" />
-                    <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>
-                        Try Again
-                    </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                    style={{
-                        backgroundColor: 'transparent',
-                        paddingVertical: 14,
-                        paddingHorizontal: 32,
-                        borderRadius: 12,
-                        width: '100%',
-                        alignItems: 'center',
-                        flexDirection: 'row',
-                        justifyContent: 'center',
-                        gap: 8,
-                        marginTop: 12,
-                        borderWidth: 1,
-                        borderColor: '#cbd5e1',
-                    }}
-                    onPress={() => {
-                        resetScanner();
-                        setTimeout(pickImage, 100);
-                    }}
-                    activeOpacity={0.8}
-                >
-                    <LucideImage size={18} color="#475569" />
-                    <Text style={{ color: '#475569', fontWeight: '600', fontSize: 15 }}>
-                        Pick from Gallery
-                    </Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    ) : verifiedPermit && vStyle && verification ? (
-        <>
-            {/* ─── HERO STATUS CARD ─── */}
-            <View style={{
-                backgroundColor: 'white',
-                borderRadius: 20,
-                padding: 24,
-                alignItems: 'center',
-                marginBottom: 16,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.04,
-                shadowRadius: 12,
-                elevation: 3,
-                borderWidth: 1,
-                borderColor: '#f1f5f9',
-            }}>
-                {/* Status Badge */}
-                <View style={{
-                    backgroundColor: vStyle.iconBg,
-                    borderRadius: 50,
-                    padding: 16,
-                    marginBottom: 12,
-                }}>
-                    <StatusIcon size={44} color={vStyle.iconColor} />
-                </View>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <TouchableOpacity
+                            onPress={resetScanner}
+                            style={{
+                                padding: 8,
+                                marginRight: 12,
+                                borderRadius: 12,
+                                backgroundColor: 'rgba(255,255,255,0.15)',
+                            }}
+                            activeOpacity={0.7}
+                        >
+                            <LucideArrowLeft size={22} color="white" />
+                        </TouchableOpacity>
 
-                {/* Status Title */}
-                <Text style={{ 
-                    fontSize: 22, 
-                    fontWeight: '700', 
-                    color: '#1e293b',
-                    marginBottom: 4,
-                }}>
-                    {vStyle.title}
-                </Text>
-                
-                {/* Status Chip */}
-                <View style={{
-                    backgroundColor: vStyle.badgeBg,
-                    paddingHorizontal: 14,
-                    paddingVertical: 4,
-                    borderRadius: 20,
-                    marginBottom: 12,
-                }}>
-                    <Text style={{ 
-                        color: vStyle.badgeText, 
-                        fontSize: 11, 
-                        fontWeight: '700',
-                        letterSpacing: 0.5,
-                    }}>
-                        {verification.validityStatus.replace(/_/g, ' ')}
-                    </Text>
-                </View>
-
-                {/* Divider */}
-                <View style={{
-                    width: 40,
-                    height: 2,
-                    backgroundColor: '#e2e8f0',
-                    borderRadius: 1,
-                    marginVertical: 8,
-                }} />
-
-                {/* Permit Number */}
-                <Text style={{
-                    color: '#0f172a',
-                    fontSize: 18,
-                    fontWeight: '700',
-                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                    letterSpacing: 0.5,
-                    marginBottom: 4,
-                }}>
-                    {verifiedPermit.permitNumber}
-                </Text>
-                
-                {/* Token ID */}
-                <Text style={{
-                    color: '#94a3b8',
-                    fontSize: 12,
-                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-                }}>
-                    Token: {verifiedPermit.id.substring(0, 14)}...
-                </Text>
-
-                {/* ─── TIME REMAINING ─── */}
-                {isActive && timeLeft && (
-                    <View style={{ width: '100%', marginTop: 12 }}>
-                        <TimeRemainingCard 
-                            timeLeft={timeLeft}
-                            expiryDate={verifiedPermit?.validUntil || undefined}
-                            isExpired={timeLeft.percentage === 0}
-                        />
-                    </View>
-                )}
-
-                {/* ─── INACTIVE REASON ─── */}
-                {!isActive && (
-                    <View style={{
-                        marginTop: 12,
-                        width: '100%',
-                        padding: 12,
-                        backgroundColor: '#fef2f2',
-                        borderRadius: 10,
-                        borderWidth: 1,
-                        borderColor: '#fecaca',
-                        alignItems: 'center',
-                    }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <AlertCircle size={16} color="#dc2626" />
-                            <Text style={{ color: '#dc2626', fontSize: 13, fontWeight: '600' }}>
-                                {getReasonText(verification.validityStatus)}
+                        <View style={{ flex: 1 }}>
+                            <Text style={{
+                                color: 'white',
+                                fontSize: 20,
+                                fontWeight: '700',
+                                letterSpacing: 0.3,
+                            }}>
+                                Verification Result
                             </Text>
-                        </View>
-                        {verifiedPermit?.validUntil && (
-                            <Text style={{ color: '#b91c1c', fontSize: 11, marginTop: 4 }}>
-                                Expired: {formatDateTime(verifiedPermit.validUntil)}
-                            </Text>
-                        )}
-                    </View>
-                )}
-            </View>
-
-            {/* ─── PERMIT DETAILS CARD ─── */}
-            <View style={{
-                backgroundColor: 'white',
-                borderRadius: 16,
-                padding: 16,
-                marginBottom: 16,
-                borderWidth: 1,
-                borderColor: '#f1f5f9',
-            }}>
-                <Text style={{
-                    color: '#94a3b8',
-                    fontSize: 11,
-                    fontWeight: '600',
-                    letterSpacing: 0.8,
-                    textTransform: 'uppercase',
-                    marginBottom: 12,
-                }}>
-                    Permit Details
-                </Text>
-
-                {/* Details Grid */}
-                <View style={{ gap: 12 }}>
-                    {verifiedPermit.vehicleNumber && (
-                        <DetailRow 
-                            icon={Truck} 
-                            label="Vehicle" 
-                            value={verifiedPermit.vehicleNumber} 
-                            monospace 
-                        />
-                    )}
-                    {verifiedPermit.driverName && (
-                        <DetailRow 
-                            icon={User} 
-                            label="Driver" 
-                            value={verifiedPermit.driverName} 
-                        />
-                    )}
-                    <DetailRow 
-                        icon={Package} 
-                        label="Material" 
-                        value={verifiedPermit.wasteType.replace(/_/g, ' ')} 
-                    />
-                    {verifiedPermit.estimatedWeight && (
-                        <DetailRow 
-                            icon={Weight} 
-                            label="Est. Weight" 
-                            value={`${verifiedPermit.estimatedWeight} kg`} 
-                        />
-                    )}
-                </View>
-            </View>
-
-            {/* ─── SECURITY & OPS ─── */}
-            {(verifiedPermit.plant || verifiedPermit.validFrom || verifiedPermit.validUntil) && (
-                <View style={{
-                    backgroundColor: 'white',
-                    borderRadius: 16,
-                    padding: 16,
-                    marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: '#f1f5f9',
-                }}>
-                    <Text style={{
-                        color: '#94a3b8',
-                        fontSize: 11,
-                        fontWeight: '600',
-                        letterSpacing: 0.8,
-                        textTransform: 'uppercase',
-                        marginBottom: 12,
-                    }}>
-                        Security & Operations
-                    </Text>
-
-                    <View style={{ gap: 12 }}>
-                        {verifiedPermit.plant && (
-                            <View>
-                                <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '500' }}>
-                                    Designated Plant
-                                </Text>
-                                <Text style={{ 
-                                    color: '#1e293b', 
-                                    fontSize: 16, 
-                                    fontWeight: '700',
-                                    marginTop: 2,
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                                <View style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: 3,
+                                    backgroundColor: isActive ? '#4ade80' : '#fca5a5'
+                                }} />
+                                <Text style={{
+                                    color: 'rgba(255,255,255,0.7)',
+                                    fontSize: 12,
+                                    fontWeight: '500',
                                 }}>
-                                    {verifiedPermit.plant.name}
+                                    {isActive ? 'Active Permit' : 'Inactive Permit'}
                                 </Text>
-                                <Text style={{ 
-                                    color: '#94a3b8', 
+                                <Text style={{
+                                    color: 'rgba(255,255,255,0.3)',
+                                    fontSize: 12,
+                                }}>
+                                    •
+                                </Text>
+                                <Text style={{
+                                    color: 'rgba(255,255,255,0.5)',
                                     fontSize: 12,
                                     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
                                 }}>
-                                    {verifiedPermit.plant.code}
+                                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </Text>
                             </View>
-                        )}
+                        </View>
 
-                        {(verifiedPermit.validFrom || verifiedPermit.validUntil) && (
-                            <View style={{ gap: 6, marginTop: 4 }}>
-                                {verifiedPermit.validFrom && (
-                                    <DateRow 
-                                        label="Activation" 
-                                        date={verifiedPermit.validFrom} 
-                                    />
-                                )}
-                                {verifiedPermit.validUntil && (
-                                    <DateRow 
-                                        label="Expiry" 
-                                        date={verifiedPermit.validUntil}
-                                        isExpired={['EXPIRED', 'REVOKED', 'SUSPENDED'].includes(verifiedPermit.status)}
-                                    />
-                                )}
-                            </View>
-                        )}
+                        {/* Optional: Quick action button */}
+                        <TouchableOpacity
+                            style={{
+                                padding: 8,
+                                borderRadius: 12,
+                                backgroundColor: 'rgba(255,255,255,0.1)',
+                            }}
+                            onPress={resetScanner}
+                            activeOpacity={0.7}
+                        >
+                            <LucideScan size={20} color="rgba(255,255,255,0.8)" />
+                        </TouchableOpacity>
                     </View>
                 </View>
-            )}
 
-            {/* ─── SOURCE ENTITY ─── */}
-            {(verifiedPermit.user || verifiedPermit.company || verifiedPermit.project) && (
-                <View style={{
-                    backgroundColor: 'white',
-                    borderRadius: 16,
-                    padding: 16,
-                    marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: '#f1f5f9',
-                }}>
-                    <Text style={{
-                        color: '#94a3b8',
-                        fontSize: 11,
-                        fontWeight: '600',
-                        letterSpacing: 0.8,
-                        textTransform: 'uppercase',
-                        marginBottom: 12,
-                    }}>
-                        Source Entity
-                    </Text>
+                {/* ═══════════════════════════════════════ */}
+                {/* MAIN CONTENT */}
+                {/* ═══════════════════════════════════════ */}
+                <ScrollView
+                    className="flex-1"
+                    contentContainerStyle={{ paddingBottom: 100, paddingHorizontal: 16, paddingTop: 16 }}
+                    showsVerticalScrollIndicator={false}
+                >
+                    {error ? (
+                        /* ─── Error State ─── */
+                        <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 40 }}>
+                            <View style={{
+                                backgroundColor: 'white',
+                                borderRadius: 20,
+                                padding: 32,
+                                alignItems: 'center',
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 4 },
+                                shadowOpacity: 0.06,
+                                shadowRadius: 16,
+                                elevation: 4,
+                            }}>
+                                <View style={{
+                                    backgroundColor: '#fee2e2',
+                                    borderRadius: 60,
+                                    padding: 20,
+                                    marginBottom: 16,
+                                }}>
+                                    <LucideXCircle size={56} color="#dc2626" />
+                                </View>
 
-                    {verifiedPermit.user && (
-                        <Text style={{ 
-                            color: '#1e293b', 
-                            fontSize: 18, 
-                            fontWeight: '700',
-                            marginBottom: 4,
-                        }}>
-                            {verifiedPermit.user.name}
-                        </Text>
-                    )}
+                                <Text style={{
+                                    fontSize: 24,
+                                    fontWeight: '700',
+                                    color: '#1e293b',
+                                    marginBottom: 4,
+                                }}>
+                                    Verification Failed
+                                </Text>
 
-                    {(verifiedPermit.project?.company || verifiedPermit.company) && (
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                            <Building2 size={16} color="#94a3b8" />
-                            <Text style={{ color: '#475569', fontSize: 14 }}>
-                                {verifiedPermit.project?.company?.name || verifiedPermit.company?.name}
-                            </Text>
+                                <View style={{
+                                    backgroundColor: '#fee2e2',
+                                    paddingHorizontal: 16,
+                                    paddingVertical: 6,
+                                    borderRadius: 20,
+                                    marginBottom: 12,
+                                }}>
+                                    <Text style={{
+                                        color: '#dc2626',
+                                        fontSize: 10,
+                                        fontWeight: '700',
+                                        letterSpacing: 1.5,
+                                    }}>
+                                        ERROR
+                                    </Text>
+                                </View>
+
+                                <Text style={{
+                                    color: '#64748b',
+                                    textAlign: 'center',
+                                    lineHeight: 22,
+                                    marginBottom: 24,
+                                }}>
+                                    {error}
+                                </Text>
+
+                                <TouchableOpacity
+                                    style={{
+                                        backgroundColor: '#dc2626',
+                                        paddingVertical: 14,
+                                        paddingHorizontal: 32,
+                                        borderRadius: 12,
+                                        width: '100%',
+                                        alignItems: 'center',
+                                        flexDirection: 'row',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                    }}
+                                    onPress={resetScanner}
+                                    activeOpacity={0.8}
+                                >
+                                    <LucideArrowLeft size={18} color="white" />
+                                    <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>
+                                        Try Again
+                                    </Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={{
+                                        backgroundColor: 'transparent',
+                                        paddingVertical: 14,
+                                        paddingHorizontal: 32,
+                                        borderRadius: 12,
+                                        width: '100%',
+                                        alignItems: 'center',
+                                        flexDirection: 'row',
+                                        justifyContent: 'center',
+                                        gap: 8,
+                                        marginTop: 12,
+                                        borderWidth: 1,
+                                        borderColor: '#cbd5e1',
+                                    }}
+                                    onPress={() => {
+                                        resetScanner();
+                                        setTimeout(pickImage, 100);
+                                    }}
+                                    activeOpacity={0.8}
+                                >
+                                    <LucideImage size={18} color="#475569" />
+                                    <Text style={{ color: '#475569', fontWeight: '600', fontSize: 15 }}>
+                                        Pick from Gallery
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
-                    )}
-                </View>
-            )}
+                    ) : verifiedPermit && vStyle && verification ? (
+                        <>
+                            {/* ─── HERO STATUS CARD ─── */}
+                            <View style={{
+                                backgroundColor: 'white',
+                                borderRadius: 20,
+                                padding: 24,
+                                alignItems: 'center',
+                                marginBottom: 16,
+                                shadowColor: '#000',
+                                shadowOffset: { width: 0, height: 2 },
+                                shadowOpacity: 0.04,
+                                shadowRadius: 12,
+                                elevation: 3,
+                                borderWidth: 1,
+                                borderColor: '#f1f5f9',
+                            }}>
+                                {/* Status Badge */}
+                                <View style={{
+                                    backgroundColor: vStyle.iconBg,
+                                    borderRadius: 50,
+                                    padding: 16,
+                                    marginBottom: 12,
+                                }}>
+                                    <StatusIcon size={44} color={vStyle.iconColor} />
+                                </View>
 
-            {/* ─── AUDIT FOOTER ─── */}
-            <View style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-                paddingVertical: 12,
-                marginBottom: 8,
-            }}>
-                <Clock size={12} color="#94a3b8" />
-                <Text style={{ 
-                    color: '#94a3b8', 
-                    fontSize: 10, 
-                    fontWeight: '600',
-                    letterSpacing: 0.5,
-                }}>
-                    AUDIT: {auditTime}
-                </Text>
-            </View>
+                                {/* Status Title */}
+                                <Text style={{
+                                    fontSize: 22,
+                                    fontWeight: '700',
+                                    color: '#1e293b',
+                                    marginBottom: 4,
+                                }}>
+                                    {vStyle.title}
+                                </Text>
 
-            {/* ─── SCAN AGAIN BUTTON ─── */}
-            <TouchableOpacity
-                style={{
-                    backgroundColor: '#1e293b',
-                    paddingVertical: 14,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                    gap: 8,
-                    marginBottom: 8,
-                }}
-                onPress={resetScanner}
-                activeOpacity={0.8}
-            >
-                <Scan size={18} color="white" />
-                <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>
-                    Verify Another Permit
-                </Text>
-            </TouchableOpacity>
+                                {/* Status Chip */}
+                                <View style={{
+                                    backgroundColor: vStyle.badgeBg,
+                                    paddingHorizontal: 14,
+                                    paddingVertical: 4,
+                                    borderRadius: 20,
+                                    marginBottom: 12,
+                                }}>
+                                    <Text style={{
+                                        color: vStyle.badgeText,
+                                        fontSize: 11,
+                                        fontWeight: '700',
+                                        letterSpacing: 0.5,
+                                    }}>
+                                        {verification.validityStatus.replace(/_/g, ' ')}
+                                    </Text>
+                                </View>
 
-            <TouchableOpacity
-                style={{
-                    backgroundColor: 'transparent',
-                    paddingVertical: 14,
-                    borderRadius: 12,
-                    alignItems: 'center',
-                    flexDirection: 'row',
-                    justifyContent: 'center',
-                    gap: 8,
-                    marginBottom: 16,
-                    borderWidth: 1,
-                    borderColor: '#cbd5e1',
-                }}
-                onPress={() => {
-                    resetScanner();
-                    setTimeout(pickImage, 100);
-                }}
-                activeOpacity={0.8}
-            >
-                <LucideImage size={18} color="#475569" />
-                <Text style={{ color: '#475569', fontWeight: '600', fontSize: 15 }}>
-                    Pick from Gallery
-                </Text>
-            </TouchableOpacity>
-        </>
-    ) : null}
-</ScrollView>
+                                {/* Divider */}
+                                <View style={{
+                                    width: 40,
+                                    height: 2,
+                                    backgroundColor: '#e2e8f0',
+                                    borderRadius: 1,
+                                    marginVertical: 8,
+                                }} />
+
+                                {/* Permit Number */}
+                                <Text style={{
+                                    color: '#0f172a',
+                                    fontSize: 18,
+                                    fontWeight: '700',
+                                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                                    letterSpacing: 0.5,
+                                    marginBottom: 4,
+                                }}>
+                                    {verifiedPermit.permitNumber}
+                                </Text>
+
+                                {/* Token ID */}
+                                <Text style={{
+                                    color: '#94a3b8',
+                                    fontSize: 12,
+                                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                                }}>
+                                    Token: {verifiedPermit.id.substring(0, 14)}...
+                                </Text>
+
+                                {/* ─── TIME REMAINING ─── */}
+                                {isActive && timeLeft && (
+                                    <View style={{ width: '100%', marginTop: 12 }}>
+                                        <TimeRemainingCard
+                                            timeLeft={timeLeft}
+                                            expiryDate={verifiedPermit?.validUntil || undefined}
+                                            isExpired={timeLeft.percentage === 0}
+                                        />
+                                    </View>
+                                )}
+
+                                {/* ─── INACTIVE REASON ─── */}
+                                {!isActive && (
+                                    <View style={{
+                                        marginTop: 12,
+                                        width: '100%',
+                                        padding: 12,
+                                        backgroundColor: '#fef2f2',
+                                        borderRadius: 10,
+                                        borderWidth: 1,
+                                        borderColor: '#fecaca',
+                                        alignItems: 'center',
+                                    }}>
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                            <AlertCircle size={16} color="#dc2626" />
+                                            <Text style={{ color: '#dc2626', fontSize: 13, fontWeight: '600' }}>
+                                                {getReasonText(verification.validityStatus)}
+                                            </Text>
+                                        </View>
+                                        {verifiedPermit?.validUntil && (
+                                            <Text style={{ color: '#b91c1c', fontSize: 11, marginTop: 4 }}>
+                                                Expired: {formatDateTime(verifiedPermit.validUntil)}
+                                            </Text>
+                                        )}
+                                    </View>
+                                )}
+                            </View>
+
+                            {/* ─── PERMIT DETAILS CARD ─── */}
+                            <View style={{
+                                backgroundColor: 'white',
+                                borderRadius: 16,
+                                padding: 16,
+                                marginBottom: 16,
+                                borderWidth: 1,
+                                borderColor: '#f1f5f9',
+                            }}>
+                                <Text style={{
+                                    color: '#94a3b8',
+                                    fontSize: 11,
+                                    fontWeight: '600',
+                                    letterSpacing: 0.8,
+                                    textTransform: 'uppercase',
+                                    marginBottom: 12,
+                                }}>
+                                    Permit Details
+                                </Text>
+
+                                {/* Details Grid */}
+                                <View style={{ gap: 12 }}>
+                                    {verifiedPermit.vehicleNumber && (
+                                        <DetailRow
+                                            icon={Truck}
+                                            label="Vehicle"
+                                            value={verifiedPermit.vehicleNumber}
+                                            monospace
+                                        />
+                                    )}
+                                    {verifiedPermit.driverName && (
+                                        <DetailRow
+                                            icon={User}
+                                            label="Driver"
+                                            value={verifiedPermit.driverName}
+                                        />
+                                    )}
+                                    <DetailRow
+                                        icon={Package}
+                                        label="Material"
+                                        value={verifiedPermit.wasteType.replace(/_/g, ' ')}
+                                    />
+                                    {verifiedPermit.estimatedWeight && (
+                                        <DetailRow
+                                            icon={Weight}
+                                            label="Est. Weight"
+                                            value={`${verifiedPermit.estimatedWeight} kg`}
+                                        />
+                                    )}
+                                </View>
+                            </View>
+
+                            {/* ─── SECURITY & OPS ─── */}
+                            {(verifiedPermit.plant || verifiedPermit.validFrom || verifiedPermit.validUntil) && (
+                                <View style={{
+                                    backgroundColor: 'white',
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    marginBottom: 16,
+                                    borderWidth: 1,
+                                    borderColor: '#f1f5f9',
+                                }}>
+                                    <Text style={{
+                                        color: '#94a3b8',
+                                        fontSize: 11,
+                                        fontWeight: '600',
+                                        letterSpacing: 0.8,
+                                        textTransform: 'uppercase',
+                                        marginBottom: 12,
+                                    }}>
+                                        Security & Operations
+                                    </Text>
+
+                                    <View style={{ gap: 12 }}>
+                                        {verifiedPermit.plant && (
+                                            <View>
+                                                <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '500' }}>
+                                                    Designated Plant
+                                                </Text>
+                                                <Text style={{
+                                                    color: '#1e293b',
+                                                    fontSize: 16,
+                                                    fontWeight: '700',
+                                                    marginTop: 2,
+                                                }}>
+                                                    {verifiedPermit.plant.name}
+                                                </Text>
+                                                <Text style={{
+                                                    color: '#94a3b8',
+                                                    fontSize: 12,
+                                                    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+                                                }}>
+                                                    {verifiedPermit.plant.code}
+                                                </Text>
+                                            </View>
+                                        )}
+
+                                        {(verifiedPermit.validFrom || verifiedPermit.validUntil) && (
+                                            <View style={{ gap: 6, marginTop: 4 }}>
+                                                {verifiedPermit.validFrom && (
+                                                    <DateRow
+                                                        label="Activation"
+                                                        date={verifiedPermit.validFrom}
+                                                    />
+                                                )}
+                                                {verifiedPermit.validUntil && (
+                                                    <DateRow
+                                                        label="Expiry"
+                                                        date={verifiedPermit.validUntil}
+                                                        isExpired={['EXPIRED', 'REVOKED', 'SUSPENDED'].includes(verifiedPermit.status)}
+                                                    />
+                                                )}
+                                            </View>
+                                        )}
+                                    </View>
+                                </View>
+                            )}
+
+                            {/* ─── SOURCE ENTITY ─── */}
+                            {(verifiedPermit.user || verifiedPermit.company || verifiedPermit.project) && (
+                                <View style={{
+                                    backgroundColor: 'white',
+                                    borderRadius: 16,
+                                    padding: 16,
+                                    marginBottom: 16,
+                                    borderWidth: 1,
+                                    borderColor: '#f1f5f9',
+                                }}>
+                                    <Text style={{
+                                        color: '#94a3b8',
+                                        fontSize: 11,
+                                        fontWeight: '600',
+                                        letterSpacing: 0.8,
+                                        textTransform: 'uppercase',
+                                        marginBottom: 12,
+                                    }}>
+                                        Source Entity
+                                    </Text>
+
+                                    {verifiedPermit.user && (
+                                        <Text style={{
+                                            color: '#1e293b',
+                                            fontSize: 18,
+                                            fontWeight: '700',
+                                            marginBottom: 4,
+                                        }}>
+                                            {verifiedPermit.user.name}
+                                        </Text>
+                                    )}
+
+                                    {(verifiedPermit.project?.company || verifiedPermit.company) && (
+                                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                            <Building2 size={16} color="#94a3b8" />
+                                            <Text style={{ color: '#475569', fontSize: 14 }}>
+                                                {verifiedPermit.project?.company?.name || verifiedPermit.company?.name}
+                                            </Text>
+                                        </View>
+                                    )}
+                                </View>
+                            )}
+
+                            {/* ─── AUDIT FOOTER ─── */}
+                            <View style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                gap: 8,
+                                paddingVertical: 12,
+                                marginBottom: 8,
+                            }}>
+                                <Clock size={12} color="#94a3b8" />
+                                <Text style={{
+                                    color: '#94a3b8',
+                                    fontSize: 10,
+                                    fontWeight: '600',
+                                    letterSpacing: 0.5,
+                                }}>
+                                    AUDIT: {auditTime}
+                                </Text>
+                            </View>
+
+                            {/* ─── SCAN AGAIN BUTTON ─── */}
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: '#1e293b',
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    alignItems: 'center',
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    marginBottom: 8,
+                                }}
+                                onPress={resetScanner}
+                                activeOpacity={0.8}
+                            >
+                                <Scan size={18} color="white" />
+                                <Text style={{ color: 'white', fontWeight: '600', fontSize: 15 }}>
+                                    Verify Another Permit
+                                </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={{
+                                    backgroundColor: 'transparent',
+                                    paddingVertical: 14,
+                                    borderRadius: 12,
+                                    alignItems: 'center',
+                                    flexDirection: 'row',
+                                    justifyContent: 'center',
+                                    gap: 8,
+                                    marginBottom: 16,
+                                    borderWidth: 1,
+                                    borderColor: '#cbd5e1',
+                                }}
+                                onPress={() => {
+                                    resetScanner();
+                                    setTimeout(pickImage, 100);
+                                }}
+                                activeOpacity={0.8}
+                            >
+                                <LucideImage size={18} color="#475569" />
+                                <Text style={{ color: '#475569', fontWeight: '600', fontSize: 15 }}>
+                                    Pick from Gallery
+                                </Text>
+                            </TouchableOpacity>
+                        </>
+                    ) : null}
+                </ScrollView>
             </SafeAreaView>
         );
     }
@@ -994,9 +994,9 @@ const DetailRow = ({ icon: Icon, label, value, monospace }: any) => (
             <Text style={{ color: '#94a3b8', fontSize: 10, fontWeight: '500', letterSpacing: 0.5 }}>
                 {label}
             </Text>
-            <Text style={{ 
-                color: '#1e293b', 
-                fontSize: 14, 
+            <Text style={{
+                color: '#1e293b',
+                fontSize: 14,
                 fontWeight: '600',
                 fontFamily: monospace ? (Platform.OS === 'ios' ? 'Menlo' : 'monospace') : undefined,
             }}>
@@ -1012,7 +1012,7 @@ const DateRow = ({ label, date, isExpired }: any) => (
         <Text style={{ color: '#64748b', fontSize: 12, fontWeight: '500' }}>
             {label}
         </Text>
-        <Text style={{ 
+        <Text style={{
             color: isExpired ? '#dc2626' : '#1e293b',
             fontSize: 13,
             fontWeight: '600',

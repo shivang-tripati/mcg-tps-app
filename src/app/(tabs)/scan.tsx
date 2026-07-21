@@ -105,8 +105,8 @@ export default function ScanScreen() {
             if (response.data.success) {
                 setVerifiedPermit(response.data.data);
                 Haptics.notificationAsync(
-                    response.data.data.verification.isActive 
-                        ? Haptics.NotificationFeedbackType.Success 
+                    response.data.data.verification.isActive
+                        ? Haptics.NotificationFeedbackType.Success
                         : Haptics.NotificationFeedbackType.Error
                 );
             } else {
@@ -158,7 +158,7 @@ export default function ScanScreen() {
                 setError(null);
 
                 const scannedResults = await Camera.scanFromURLAsync(result.assets[0].uri, ['qr']);
-                
+
                 if (scannedResults && scannedResults.length > 0) {
                     setProcessingImage(false);
                     await processVerification(scannedResults[0].data);
@@ -220,10 +220,10 @@ export default function ScanScreen() {
                 <Text className="text-muted-foreground mt-2 text-center mb-6">
                     Please enable camera permissions in your device settings to scan QR codes.
                 </Text>
-                
-                <Button 
-                    label="Open Settings" 
-                    onPress={() => Linking.openSettings()} 
+
+                <Button
+                    label="Open Settings"
+                    onPress={() => Linking.openSettings()}
                     className="w-full mb-4"
                 />
             </SafeAreaView>
