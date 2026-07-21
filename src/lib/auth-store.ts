@@ -148,14 +148,12 @@ export const useAuth = create<AuthState>((set, get) => ({
     },
 
     hydrate: async () => {
-        console.log('💧 Hydrating auth state...');
         try {
             const token = await SecureStorage.getItem(AUTH_TOKEN_KEY);
             const userStr = await storage.getString(USER_KEY);
 
             if (token && userStr) {
                 const user = JSON.parse(userStr);
-                console.log('✅ Found stored auth data for user:', user.email);
                 set({
                     user,
                     isAuthenticated: true,
@@ -164,7 +162,6 @@ export const useAuth = create<AuthState>((set, get) => ({
                     tokenValid: null
                 });
             } else {
-                console.log('ℹ️ No stored auth data found');
                 set({
                     user: null,
                     isAuthenticated: false,
@@ -186,7 +183,6 @@ export const useAuth = create<AuthState>((set, get) => ({
     },
 
     validateToken: async () => {
-        console.log('🔍 Validating token...');
 
         if (!get().isAuthenticated) {
             set({ tokenValid: false });
@@ -197,7 +193,6 @@ export const useAuth = create<AuthState>((set, get) => ({
             const token = await SecureStorage.getItem(AUTH_TOKEN_KEY);
 
             if (!token) {
-                console.log('❌ No access token found');
                 set({
                     tokenValid: false,
                     isAuthenticated: false,
@@ -214,7 +209,6 @@ export const useAuth = create<AuthState>((set, get) => ({
             });
 
             if (response.status >= 200 && response.status < 300) {
-                console.log('✅ Token/session is valid');
 
                 // Update user data from validation response
                 const userData = response.data?.data?.user;
@@ -244,7 +238,6 @@ export const useAuth = create<AuthState>((set, get) => ({
 
             // Network errors - keep token but mark as unknown
             if (isNetworkError(error)) {
-                console.log('🌐 Network error during validation - keeping session');
                 set({ tokenValid: null });
                 return false;
             }
@@ -253,7 +246,6 @@ export const useAuth = create<AuthState>((set, get) => ({
 
             // 401/403 - invalid session
             if (status === 401 || status === 403) {
-                console.log('🔴 Session is invalid or expired');
                 set({
                     tokenValid: false,
                     isAuthenticated: false,

@@ -17,60 +17,52 @@ export default function LandingScreen() {
     const [isRedirecting, setIsRedirecting] = useState(false);
     const redirectAttempted = useRef(false);
 
+
     useEffect(() => {
         // Don't redirect if still loading auth
         if (isLoading) {
-            console.log('⏳ Auth still loading...');
             return;
         }
 
         // Don't redirect if not authenticated
         if (!isAuthenticated) {
-            console.log('❌ Not authenticated - showing landing page');
             setIsRedirecting(false);
             return;
         }
 
         // Wait for token validation
         if (tokenValid === null) {
-            console.log('⏳ Token validation pending...');
             return;
         }
 
         // Don't redirect if token is invalid
         if (tokenValid === false) {
-            console.log('❌ Token invalid - showing landing page');
             setIsRedirecting(false);
             return;
         }
 
         // Don't redirect if already redirecting
         if (isRedirecting) {
-            console.log('⏳ Already redirecting...');
             return;
         }
 
         // Don't redirect if onboarding is still checking
         if (isChecking) {
-            console.log('⏳ Onboarding check in progress...');
             return;
         }
 
         // Don't redirect if already attempted
         if (redirectAttempted.current) {
-            console.log('⏭️ Redirect already attempted');
             return;
         }
 
         // Now we have a valid authenticated user with onboarding checked
         if (user) {
-            console.log('🔄 Attempting redirect for user:', user.role);
             setIsRedirecting(true);
             redirectAttempted.current = true;
 
             // Admin users go to admin panel
             if (user.role === UserRole.ADMIN) {
-                console.log('➡️ Redirecting to admin panel');
                 router.replace('/(admin)');
                 return;
             }
@@ -79,19 +71,16 @@ export default function LandingScreen() {
             if (checked) {
                 if (isOnboarded) {
                     // Fully onboarded - go to dashboard
-                    console.log('➡️ Redirecting to dashboard (onboarded)');
                     router.replace('/(tabs)/dashboard');
                 } else {
                     // Not onboarded - go to onboarding
                     const route = user.role === UserRole.COMPANY_USER
                         ? '/(onboarding)/company'
                         : '/(onboarding)/individual';
-                    console.log('➡️ Redirecting to onboarding:', route);
                     router.replace(route);
                 }
             } else {
                 // If checked is false, reset redirect and wait
-                console.log('⏳ Onboarding not checked yet, waiting...');
                 setIsRedirecting(false);
                 redirectAttempted.current = false;
             }

@@ -46,7 +46,6 @@ export const useOnboarding = create<OnboardingState>()(
             lastCheckedAt: null,
 
             handleIndividualOnboarding: async () => {
-                console.log('Checking INDIVIDUAL onboarding');
                 try {
                     const response = await api.get('/profile', { timeout: 5000 });
                     const profile = response.data.data;
@@ -58,7 +57,6 @@ export const useOnboarding = create<OnboardingState>()(
                     const hasAadhaar = !!aadhaar;
                     const hasPAN = !!pan;
 
-                    console.log('Individual docs found:', { hasAadhaar, hasPAN });
 
                     set({
                         checked: true,
@@ -86,28 +84,23 @@ export const useOnboarding = create<OnboardingState>()(
 
             handleCompanyOnboarding: async (user: { role: string; companyId?: string | null }) => {
                 const hasCompany = !!user.companyId;
-                console.log('Has company:', hasCompany, 'Company ID:', user.companyId);
 
                 let hasProject = false;
                 let projects: any[] = [];
 
                 if (hasCompany) {
                     try {
-                        console.log('Fetching projects with timeout...');
                         const resp = await api.get('/projects', { timeout: 5000 });
                         projects = resp.data.data || [];
                         hasProject = projects.length > 0;
-                        console.log('Projects found:', projects.length);
 
                         set({ cachedProjects: projects });
                     } catch (error: any) {
                         console.error('Error fetching projects:', error);
 
                         if (isNetworkError(error)) {
-                            console.log('Network error fetching projects - using cache if available');
                             const cached = get().cachedProjects;
                             if (cached !== null) {
-                                console.log('Using cached projects:', cached.length);
                                 projects = cached;
                                 hasProject = cached.length > 0;
                             } else {
@@ -116,7 +109,6 @@ export const useOnboarding = create<OnboardingState>()(
                         } else {
                             const cached = get().cachedProjects;
                             if (cached !== null) {
-                                console.log('Using cached projects:', cached.length);
                                 projects = cached;
                                 hasProject = cached.length > 0;
                             } else {
@@ -127,7 +119,6 @@ export const useOnboarding = create<OnboardingState>()(
                 }
 
                 const isOnboarded = hasCompany && hasProject;
-                console.log('Company user status:', { hasCompany, hasProject, isOnboarded });
 
                 set({
                     checked: true,
@@ -142,7 +133,6 @@ export const useOnboarding = create<OnboardingState>()(
 
             checkOnboardingStatus: async (user: { role: string; companyId?: string | null }) => {
                 if (get().isChecking) {
-                    console.log('Onboarding check already in progress');
                     return;
                 }
 
@@ -151,11 +141,9 @@ export const useOnboarding = create<OnboardingState>()(
                 const isCacheValid = cacheAge < 5 * 60 * 1000;
 
                 if (get().checked && get().isOnboarded && isCacheValid) {
-                    console.log('Using cached onboarding status');
                     return;
                 }
 
-                console.log('Starting onboarding check for user:', user.role);
                 set({ isChecking: true });
 
                 try {
@@ -164,7 +152,6 @@ export const useOnboarding = create<OnboardingState>()(
                     } else if (user.role === 'COMPANY_USER') {
                         await get().handleCompanyOnboarding(user);
                     } else {
-                        console.log('Admin or guest user - skipping onboarding');
                         set({
                             checked: true,
                             isOnboarded: true,
@@ -177,7 +164,6 @@ export const useOnboarding = create<OnboardingState>()(
 
                     const cachedProjects = get().cachedProjects;
                     if (cachedProjects !== null) {
-                        console.log('Using cached projects data on error');
                         const hasProject = cachedProjects.length > 0;
                         set({
                             checked: true,

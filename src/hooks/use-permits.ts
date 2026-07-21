@@ -210,13 +210,10 @@ function extractPermitFieldErrors(responseData: unknown): PermitFieldErrors {
 }
 
 export function usePermits(params: UsePermitsParams = {}) {
-    console.log('🔵 [usePermits] Hook called with params:', JSON.stringify(params, null, 2));
     
     return useQuery({
         queryKey: ['permits', params],
         queryFn: async () => {
-            console.log('🔄 [usePermits] QueryFn executing...');
-            console.log('🔄 [usePermits] API Base URL:', api.defaults.baseURL);
             
             try {
                 const searchParams = new URLSearchParams();
@@ -226,11 +223,6 @@ export function usePermits(params: UsePermitsParams = {}) {
                 if (params.search) searchParams.set('search', params.search);
 
                 const url = `/permits?${searchParams.toString()}`;
-                console.log('📡 [usePermits] Full URL:', `${api.defaults.baseURL}${url}`);
-                console.log('📡 [usePermits] Headers:', {
-                    Authorization: api.defaults.headers.common['Authorization'] ? 'Bearer [TOKEN]' : 'None',
-                    'X-Client-Type': api.defaults.headers.common['X-Client-Type'],
-                });
                 
                 const startTime = Date.now();
                 const response = await api.get<ApiResponse<Permit[]>>(
@@ -239,13 +231,6 @@ export function usePermits(params: UsePermitsParams = {}) {
                 );
                 const duration = Date.now() - startTime;
                 
-                console.log(`✅ [usePermits] API call completed in ${duration}ms`);
-                console.log('📊 [usePermits] Response status:', response.status);
-                console.log('📊 [usePermits] Response data:', {
-                    success: response.data.success,
-                    count: response.data.data?.length ?? 0,
-                    hasData: !!response.data.data,
-                });
                 
                 return response.data;
             } catch (error: unknown) {
@@ -273,16 +258,10 @@ export function usePermits(params: UsePermitsParams = {}) {
             }
         },
         retry: (failureCount, error) => {
-            console.log(`🔄 [usePermits] Retry attempt ${failureCount + 1}`);
-            console.log('🔄 [usePermits] Error:', {
-                isAxiosError: isAxiosError(error),
-                message: error instanceof Error ? error.message : 'Unknown error',
-            });
             
             if (isAxiosError(error)) {
                 const status = error.response?.status;
                 if (status === 401 || status === 403 || status === 404) {
-                    console.log('❌ [usePermits] Not retrying on status:', status);
                     return false;
                 }
             }
@@ -290,7 +269,6 @@ export function usePermits(params: UsePermitsParams = {}) {
         },
         retryDelay: (attemptIndex) => {
             const delay = Math.min(1000 * 2 ** attemptIndex, 30000);
-            console.log(`⏳ [usePermits] Retry delay: ${delay}ms`);
             return delay;
         },
         staleTime: 30000,
@@ -613,15 +591,6 @@ export function useUploadPermitWasteEvidence() {
                     'waste_evidence'
                 );
 
-                console.log('[EVIDENCE UPLOAD START]', {
-                    permitId,
-                    uploadUrl,
-                    uri,
-                    fileName: file.name,
-                    fileSize: file.size,
-                    mimeType: file.type,
-                    exists: file.exists,
-                });
 
                 /*
                  * Do not manually add Content-Type.
@@ -642,11 +611,6 @@ export function useUploadPermitWasteEvidence() {
                 const responseText =
                     await uploadResponse.text();
 
-                console.log('[EVIDENCE UPLOAD RESPONSE]', {
-                    status: uploadResponse.status,
-                    ok: uploadResponse.ok,
-                    responseText,
-                });
 
                 let uploadBody:
                     | ApiResponse<UploadFileResult>

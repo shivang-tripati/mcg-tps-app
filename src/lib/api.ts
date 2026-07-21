@@ -356,7 +356,6 @@ api.interceptors.response.use(
         isRefreshing = true;
 
         try {
-            console.log('Attempting token refresh...');
 
             const refreshToken =
                 await SecureStorage.getItem(

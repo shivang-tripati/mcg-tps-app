@@ -84,12 +84,7 @@ function getErrorMessage(error: unknown): string {
 
 const testPermitsEndpoint = async () => {
     try {
-        console.log('🧪 Testing /permits endpoint...');
         const response = await api.get('/permits', { timeout: 5000 });
-        console.log('✅ /permits endpoint test successful:', {
-            status: response.status,
-            data: response.data,
-        });
         return true;
     } catch (error) {
         console.error('❌ /permits endpoint test failed:', error);
@@ -117,13 +112,6 @@ export default function PermitsScreen() {
     const [errorType, setErrorType] = useState<'network' | 'server' | 'auth' | 'unknown' | null>(null);
 
     // ✅ LOG: Component mount
-    console.log('🔵 [PermitsScreen] Component mounted');
-    console.log('🔵 [PermitsScreen] User:', {
-        id: user?.id,
-        email: user?.email,
-        role: user?.role,
-        companyId: user?.companyId,
-    });
 
     const {
         data,
@@ -143,50 +131,17 @@ export default function PermitsScreen() {
 
     // ✅ LOG: Query status changes
     useEffect(() => {
-        console.log('📊 [PermitsScreen] Query Status:', {
-            isPending,
-            isError,
-            isFetching,
-            failureCount,
-            status,
-            hasData: !!data,
-            dataCount: data?.data?.length ?? 0,
-        });
     }, [isPending, isError, isFetching, failureCount, status, data]);
 
     // ✅ LOG: Data changes
     useEffect(() => {
         if (data) {
-            console.log('✅ [PermitsScreen] Data received:', {
-                count: data.data?.length ?? 0,
-                firstItem: data.data?.[0]?.permitNumber,
-                success: data.success
-            });
         }
     }, [data]);
 
     // ✅ LOG: Error changes with full details
     useEffect(() => {
         if (error) {
-            console.log('❌ [PermitsScreen] Error object:', {
-                name: error.name,
-                message: error.message,
-                stack: error.stack,
-                // If it's an Axios error, log more details
-                ...(isAxiosError(error) && {
-                    code: error.code,
-                    status: error.response?.status,
-                    statusText: error.response?.statusText,
-                    data: error.response?.data,
-                    headers: error.response?.headers,
-                    config: {
-                        url: error.config?.url,
-                        method: error.config?.method,
-                        baseURL: error.config?.baseURL,
-                        timeout: error.config?.timeout,
-                    },
-                }),
-            });
         }
     }, [error]);
 
@@ -196,11 +151,6 @@ export default function PermitsScreen() {
             const isNetworkErr = isNetworkError(error);
             const errorMessage = getErrorMessage(error);
 
-            console.log('🔴 [PermitsScreen] Error State:', {
-                isNetworkErr,
-                errorMessage,
-                errorType: isAxiosError(error) ? 'AxiosError' : typeof error,
-            });
 
             let type: 'network' | 'auth' | 'server' | 'unknown' = 'unknown';
 
@@ -213,7 +163,6 @@ export default function PermitsScreen() {
                 } else if (status === 500) {
                     type = 'server';
                 }
-                console.log('🔴 [PermitsScreen] HTTP Status:', status);
             }
 
             setErrorType(type);
@@ -232,18 +181,11 @@ export default function PermitsScreen() {
 
     // ✅ Show success toast on refresh
     const handleRefresh = async () => {
-        console.log('🔄 [PermitsScreen] Manual refresh triggered');
-        console.log('🔄 [PermitsScreen] Retry count:', retryCount + 1);
 
         try {
             setRetryCount(prev => prev + 1);
             const result = await refetch();
 
-            console.log('🔄 [PermitsScreen] Refresh result:', {
-                isSuccess: !result.isError,
-                isError: result.isError,
-                dataCount: result.data?.data?.length ?? 0,
-            });
 
             if (!result.isError) {
                 Toast.show({
@@ -262,19 +204,12 @@ export default function PermitsScreen() {
     };
 
     const openPermit = (permitId: string) => {
-        console.log('🔍 [PermitsScreen] Opening permit:', {
-            permitId,
-            userRole: user?.role,
-            isAdmin: user?.role === 'ADMIN',
-        });
 
         if (user?.role === 'ADMIN') {
             const route = `/(admin)/permits/${permitId}`;
-            console.log('📱 [PermitsScreen] Navigating to admin route:', route);
             router.push(route);
         } else {
             const route = `/permits/${permitId}`;
-            console.log('📱 [PermitsScreen] Navigating to user route:', route);
             router.push(route);
         }
     };
@@ -355,7 +290,6 @@ export default function PermitsScreen() {
 
     // ✅ Enhanced loading state
     if (isPending) {
-        console.log('⏳ [PermitsScreen] Loading state');
         return (
             <SafeAreaView className="flex-1 bg-background justify-center items-center">
                 <ActivityIndicator size="large" color={PRIMARY} />
@@ -384,13 +318,6 @@ export default function PermitsScreen() {
                     ? 'The server is experiencing issues. Please try again later.'
                     : 'Something went wrong. Please try again.';
 
-        console.log('❌ [PermitsScreen] Rendering error state:', {
-            isNetworkErr,
-            isAuthErr,
-            isServerErr,
-            errorType,
-            errorMessage,
-        });
 
         return (
             <SafeAreaView className="flex-1 bg-background justify-center items-center px-8">
@@ -437,11 +364,6 @@ export default function PermitsScreen() {
     const refreshing = isFetching && !isPending;
     const permits = (data?.data ?? []) as PermitListItem[];
 
-    console.log('✅ [PermitsScreen] Rendering permits list:', {
-        count: permits.length,
-        refreshing,
-        isFetching,
-    });
 
     return (
         <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -469,7 +391,6 @@ export default function PermitsScreen() {
                         <TouchableOpacity
                             className="p-2.5 rounded-xl bg-white/15 active:bg-white/25"
                             onPress={() => {
-                                console.log('➕ [PermitsScreen] Navigating to create permit');
                                 router.push('/permits/new' as const);
                             }}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

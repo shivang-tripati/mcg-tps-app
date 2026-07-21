@@ -206,13 +206,6 @@ export function FileUpload({
                 type: fileToUpload.type,
             } as any);
 
-            console.log('[FILE UPLOAD START]', {
-                uploadUrl,
-                uri: fileToUpload.uri,
-                fileName: fileToUpload.name,
-                fileSize: fileToUpload.size,
-                mimeType: fileToUpload.type,
-            });
 
             // ✅ Use fetch (not axios) - this works!
             const uploadResponse = await fetch(uploadUrl, {
@@ -227,11 +220,6 @@ export function FileUpload({
 
             const responseText = await uploadResponse.text();
 
-            console.log('[FILE UPLOAD RESPONSE]', {
-                status: uploadResponse.status,
-                ok: uploadResponse.ok,
-                responseText: responseText.substring(0, 200),
-            });
 
             let uploadBody;
             try {

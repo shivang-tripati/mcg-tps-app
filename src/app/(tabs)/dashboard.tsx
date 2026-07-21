@@ -81,19 +81,12 @@ export default function DashboardScreen() {
 
     // In your component
     const openPermit = (permitId: string) => {
-        console.log('🔍 Opening permit:', {
-            permitId,
-            userRole: user?.role,
-            isAdmin: user?.role === 'ADMIN'
-        });
 
         if (user?.role === 'ADMIN') {
             const route = `/(admin)/permits/${permitId}`;
-            console.log('📱 Navigating to admin route:', route);
             router.push(route);
         } else {
             const route = `/permits/${permitId}`;
-            console.log('📱 Navigating to user route:', route);
             router.push(route);
         }
     };

@@ -155,37 +155,30 @@ export default function RootLayout() {
         const validateTokenIfNeeded = async () => {
             // Skip if validation already started
             if (validationStarted.current) {
-                console.log('⏭️ Validation already started, skipping...');
                 return;
             }
 
             // Skip if not authenticated
             if (!isAuthenticated) {
-                console.log('⏭️ Not authenticated, skipping validation');
                 return;
             }
 
             // Skip if still loading
             if (isLoading) {
-                console.log('⏭️ Still loading, skipping validation');
                 return;
             }
 
             // Skip if already validated
             if (tokenValid !== null) {
-                console.log(`⏭️ Already validated: tokenValid=${tokenValid}`);
                 return;
             }
 
-            console.log('🔍 Starting token validation...');
             validationStarted.current = true;
 
             try {
                 const isValid = await validateToken();
-                console.log(`✅ Token validation completed: ${isValid}`);
 
                 if (isValid) {
-                    console.log('✅ Token validated successfully - triggering onboarding check');
                     // Trigger onboarding check
                     onboardingCheckDone.current = false;
                     const { user } = useAuth.getState();
@@ -193,7 +186,6 @@ export default function RootLayout() {
                         useOnboarding.getState().checkOnboardingStatus(user);
                     }
                 } else {
-                    console.log('❌ Token validation failed');
                     // If token is invalid, logout
                     await useAuth.getState().logout();
                 }
@@ -214,7 +206,6 @@ export default function RootLayout() {
         const checkOnboarding = async () => {
             // Skip if already checked onboarding
             if (onboardingCheckDone.current) {
-                console.log('⏭️ Onboarding already checked, skipping');
                 return;
             }
 
@@ -226,18 +217,15 @@ export default function RootLayout() {
 
             // If token validity is unknown, wait
             if (tokenValid === null) {
-                console.log('⏳ Token validation pending - waiting before onboarding check');
                 return;
             }
 
             // Skip if token is not valid
             if (tokenValid !== true) {
-                console.log('⏭️ Session not valid - skipping onboarding');
                 return;
             }
 
             if (isOffline) {
-                console.log('⏭️ Offline - skipping onboarding API check');
                 return;
             }
 
@@ -253,7 +241,6 @@ export default function RootLayout() {
             // Skip if no user
             if (!user) return;
 
-            console.log('🔄 Starting onboarding check...');
             onboardingCheckDone.current = true;
 
             try {
@@ -355,13 +342,11 @@ export default function RootLayout() {
 
         // If token validation is pending, wait
         if (tokenValid === null) {
-            console.log('⏳ Waiting for token validation...');
             return;
         }
 
         // Invalid token - logout
         if (tokenValid === false) {
-            console.log('🔴 Invalid token - logging out');
             useAuth.getState().logout();
             return;
         }

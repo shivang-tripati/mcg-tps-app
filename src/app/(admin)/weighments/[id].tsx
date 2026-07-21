@@ -77,9 +77,6 @@ const getFullUrl = (path: string) => {
     // For example: /uploads/public/weighments/file.pdf
     const url = `${baseUrl}${cleanPath}`;
 
-    console.log('📄 Generated PDF URL:', url);
-    console.log('📄 Base URL:', baseUrl);
-    console.log('📄 Clean Path:', cleanPath);
 
     return url;
 };
@@ -94,7 +91,6 @@ const openPDF = async (url: string) => {
             return;
         }
 
-        console.log('Opening PDF:', fullUrl);
 
         // Check if the URL is accessible
         const supported = await Linking.canOpenURL(fullUrl);

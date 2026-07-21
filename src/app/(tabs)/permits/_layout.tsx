@@ -1,7 +1,6 @@
 import { Stack } from 'expo-router';
 
 export default function PermitsLayout() {
-    console.log('🏗️ [PermitsLayout] Rendering');
     
     return (
         <Stack
